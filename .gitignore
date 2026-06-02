@@ -1,0 +1,45 @@
+# ── Python / Django ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.sqlite3
+staticfiles/
+mediafiles/
+
+# ── Node / Next.js ───────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+
+# ── Environment / secrets ────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── ML artifacts (large; track via DVC/registry, not git) ─────
+ai_modules/**/*.pkl
+ai_modules/**/*.joblib
+ai_modules/**/*.h5
+ai_modules/**/*.onnx
+ai_modules/**/datasets/
+
+# ── Local dev memory (zero companion, planning-with-files) ───
+dev/memory/
+
+# ── Tooling / OS ─────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

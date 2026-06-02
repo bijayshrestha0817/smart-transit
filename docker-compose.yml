@@ -1,0 +1,109 @@
+# Smart Transit AI — local development stack.
+#
+#   docker compose up --build
+#
+# Brings up PostgreSQL + Redis, runs migrations once, then starts the four
+# backend processes (HTTP/DRF, WebSocket/ASGI, Celery worker, Celery beat).
+# The frontend service joins here in P0-0c; prod hardening (Nginx, gunicorn,
+# TLS, prod settings) lands in P7 via infra/ + docker-compose.prod.yml.
+
+# Shared environment for every backend service. Dev defaults only — non-secret.
+x-backend-env: &backend-env
+  DJANGO_SETTINGS_MODULE: config.settings.dev
+  DJANGO_DEBUG: "true"
+  DJANGO_SECRET_KEY: docker-dev-insecure-secret-change-me-0123456789-abcdef
+  DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0,web"
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/smart_transit
+  REDIS_URL: redis://redis:6379/0
+  FRONTEND_URL: http://localhost:3000
+  CORS_ALLOWED_ORIGINS: http://localhost:3000
+  CSRF_TRUSTED_ORIGINS: http://localhost:3000
+  JWT_COOKIE_SECURE: "false"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: smart_transit
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smart_transit"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: builds the shared image and applies migrations, then exits.
+  migrate:
+    build:
+      context: ./backend
+    image: smart-transit-backend:dev
+    command: python manage.py migrate --noinput
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # HTTP / DRF. runserver under DEBUG serves admin + Swagger static assets.
+  web:
+    image: smart-transit-backend:dev
+    command: python manage.py runserver 0.0.0.0:8000
+    environment: *backend-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/schema/').status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # WebSocket / ASGI (Channels). P2 registers the consumers.
+  ws:
+    image: smart-transit-backend:dev
+    command: daphne -b 0.0.0.0 -p 9000 config.asgi:application
+    environment: *backend-env
+    ports:
+      - "9000:9000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: smart-transit-backend:dev
+    command: celery -A config worker --loglevel info
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  beat:
+    image: smart-transit-backend:dev
+    command: celery -A config beat --loglevel info
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

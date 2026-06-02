@@ -1,0 +1,5 @@
+# Production-only dependencies.
+-r base.txt
+
+gunicorn>=23.0      # WSGI server for the DRF/HTTP process
+whitenoise>=6.8     # static file serving behind Nginx
