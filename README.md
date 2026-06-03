@@ -58,6 +58,10 @@ smart-transit-ai/
 └── docs/         # ◀ you are here
 ```
 
+> The backend is implemented through **P0 (foundation + auth)** and **P1 (domain CRUD)**.
+> See **[`backend/README.md`](backend/README.md)** for the full backend reference — architecture,
+> API endpoints, auth, configuration, and how to run it.
+
 ## Design documents
 
 Read in this order:

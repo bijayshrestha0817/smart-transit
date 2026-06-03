@@ -126,7 +126,8 @@ backend/
 │   ├── notifications/  # FCM, in-app, email; notification model
 │   └── analytics/      # snapshots, report/export endpoints
 ├── ai_modules/         # eta/, occupancy/, route_optimize/, anomaly/, maintenance/
-├── channels/           # consumers, routing, middleware (JWT auth)
+├── realtime/           # consumers, routing, middleware (JWT auth) — top-level so it
+│                        #   doesn't shadow the installed `channels` library
 └── celery_tasks/       # async tasks + beat schedule
 ```
 
@@ -352,6 +353,9 @@ flowchart TB
 1. **Model registry location** — S3/Spaces bucket vs. mounted volume vs. MLflow. *(Phase P5)*
 2. **GPS write strategy** — batched ORM insert vs. Redis Stream → periodic drain vs.
    TimescaleDB hypertable if `gps_locations` volume explodes. *(Phase P2; revisit at scale)*
+   — **RESOLVED in P2: batched ORM insert.** The driver consumer fans out each point first,
+   then buffers and flushes to `gps_locations` via `bulk_create` every `GPS_FLUSH_SIZE` points
+   (and on disconnect). Redis Stream / TimescaleDB remain the documented scale-out paths.
 3. **Payment gateways** — confirm Khalti + eSewa (Nepal) vs. Stripe (intl) priority for MVP. *(Phase P4)*
 4. **Single vs. split Redis** — one instance now; split channel-layer vs. cache/broker if
    contention appears. *(Operational; not blocking)*

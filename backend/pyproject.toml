@@ -12,3 +12,4 @@ DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 pythonpath = ["."]
 addopts = "-q"
+asyncio_mode = "auto"  # async consumer tests don't need explicit @pytest.mark.asyncio

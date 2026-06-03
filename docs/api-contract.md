@@ -148,6 +148,7 @@ permission class; the role-column on `users` is the single source of authority.
 |----------|------|---------------|
 | Routes | `/admin/routes/` | `POST /{id}/stops/` assign stops, `PATCH /{id}/schedule/` |
 | Buses | `/admin/buses/` | `PATCH /{id}/assign-driver/`, `PATCH /{id}/maintenance/` |
+| Trips | `/admin/trips/` | — (P2 minimal scheduling: `bus`+`route`+`driver`+`status`) |
 | Drivers | `/admin/drivers/` | `GET /{id}/performance/`, `GET /{id}/shifts/` |
 | Passengers | `/admin/passengers/` | `POST /{id}/suspend/`, `GET /{id}/history/` |
 | Maintenance | `/admin/maintenance-logs/` | — |
@@ -227,5 +228,5 @@ channel — the client does not poll.
 | `5xx` | server error (enveloped, no stack traces leaked) |
 
 Error `code`s are stable machine strings (`validation_error`, `not_verified`,
-`insufficient_balance`, `payment_failed`, `trip_already_started`, …) so the frontend can
-branch on them without parsing prose.
+`insufficient_balance`, `payment_failed`, `trip_already_started`, `trip_not_in_progress`,
+`trip_not_assigned`, …) so the frontend can branch on them without parsing prose.
