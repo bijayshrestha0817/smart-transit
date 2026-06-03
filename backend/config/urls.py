@@ -13,6 +13,7 @@ urlpatterns = [
     # Per-app version dispatch (accounts owns /v1/auth/, buses owns /v1/{routes,stops,admin}/).
     path("api/", include("apps.accounts.urls")),
     path("api/", include("apps.buses.urls")),
+    path("api/", include("apps.trips.urls")),
     # OpenAPI schema + Swagger UI
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

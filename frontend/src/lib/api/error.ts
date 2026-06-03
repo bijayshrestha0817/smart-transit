@@ -9,7 +9,12 @@
 
 import axios, { type AxiosError } from "axios";
 
-import type { ApiEnvelope, ApiErrorItem } from "./types";
+import type {
+  ApiEnvelope,
+  ApiErrorItem,
+  PaginatedEnvelope,
+  PaginationMeta,
+} from "./types";
 
 export class ApiError extends Error {
   /** Primary (first) error code from the envelope; "" if none. */
@@ -92,4 +97,21 @@ export function unwrap<T>(envelope: ApiEnvelope<T>): T {
     throw new ApiError(first.detail, first.code, 0, envelope.errors);
   }
   return envelope.data as T;
+}
+
+/**
+ * Unwrap a cursor-paginated envelope into its rows + pagination metadata.
+ *
+ * Same defensive throw path as `unwrap` (the interceptor normally rejects non-2xx
+ * first). Callers re-issue the relative endpoint with the extracted cursor token —
+ * the absolute `next`/`prev` URLs are never sent back through `api`.
+ */
+export function unwrapPage<T>(
+  env: PaginatedEnvelope<T>,
+): { rows: T[]; pagination: PaginationMeta } {
+  if (env.errors && env.errors.length > 0) {
+    const [first] = env.errors;
+    throw new ApiError(first.detail, first.code, 0, env.errors);
+  }
+  return { rows: env.data, pagination: env.meta.pagination };
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { Brand } from "@/components/brand";
@@ -9,12 +10,27 @@ import { LogoutButton } from "@/components/logout-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { UserRole } from "@/lib/api/types";
 import { dashboardPath } from "@/lib/auth-routes";
+import { cn } from "@/lib/utils";
 import { useMe } from "@/hooks/use-auth";
 
 const ROLE_LABEL: Record<UserRole, string> = {
   passenger: "Passenger",
   driver: "Driver",
   admin: "Operator",
+};
+
+/** Primary nav per role. Driver portal arrives in P2, so it has no links yet. */
+const NAV_BY_ROLE: Record<UserRole, { href: string; label: string }[]> = {
+  passenger: [
+    { href: "/passenger/routes", label: "Routes" },
+    { href: "/passenger/stops", label: "Stops" },
+  ],
+  driver: [],
+  admin: [
+    { href: "/admin/routes", label: "Routes" },
+    { href: "/admin/buses", label: "Buses" },
+    { href: "/admin/drivers", label: "Drivers" },
+  ],
 };
 
 /**
@@ -33,6 +49,7 @@ export function DashboardShell({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isLoading, isResolved } = useMe();
 
   useEffect(() => {
@@ -61,6 +78,26 @@ export function DashboardShell({
             <span className="label-mono hidden rounded-md border bg-muted/50 px-2 py-1 text-[0.6rem] text-muted-foreground sm:inline-block">
               {ROLE_LABEL[role]}
             </span>
+            <nav className="ml-1 hidden items-center gap-0.5 md:flex">
+              {NAV_BY_ROLE[role].map((item) => {
+                const active =
+                  pathname === item.href || pathname.startsWith(`${item.href}/`);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 text-sm transition-colors",
+                      active
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden text-sm text-muted-foreground sm:inline">

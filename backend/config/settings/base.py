@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "apps.common",
     "apps.accounts",
     "apps.buses",
+    "apps.trips",
 ]
 
 MIDDLEWARE = [
@@ -192,6 +193,12 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SCHEMA_PATH_PREFIX": "/api/v1",
+    # Several models expose a ``status`` choice field; name each enum component
+    # explicitly so drf-spectacular doesn't fall back to hashed "StatusXyzEnum" names.
+    "ENUM_NAME_OVERRIDES": {
+        "BusStatusEnum": "apps.buses.enums.BusStatus.choices",
+        "TripStatusEnum": "apps.trips.enums.TripStatus.choices",
+    },
 }
 
 # ── CORS / CSRF ──────────────────────────────────────────────────────────────

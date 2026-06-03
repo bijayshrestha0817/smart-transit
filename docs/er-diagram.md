@@ -83,9 +83,10 @@ erDiagram
         bigint   bus_id FK
         bigint   route_id FK
         bigint   driver_id FK "→ users.id"
-        timestamptz start_time
-        timestamptz end_time "nullable"
+        timestamptz start_time "nullable, set on start"
+        timestamptz end_time "nullable, set on end"
         string   status "enum: scheduled|in_progress|completed|cancelled"
+        int      passenger_count "nullable, driver-entered (P2)"
     }
     GPS_LOCATIONS {
         bigint   id PK
@@ -175,7 +176,8 @@ geofencing "N stops away" calculation.
 ### `trips`
 The operational heart: a `bus` + `route` + `driver` over a time window. `status`
 transitions `scheduled → in_progress → completed` (or `cancelled`). Almost every live and
-analytical query joins through here.
+analytical query joins through here. `passenger_count` (nullable) is the driver-entered
+manual count from `POST /driver/trips/{id}/passenger-count/` (added in P2; AI occupancy is P5).
 
 ### `gps_locations`
 **Highest-volume table** (one row per emit, every 3–5 s per active trip). Append-only,

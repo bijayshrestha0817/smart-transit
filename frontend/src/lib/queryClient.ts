@@ -30,4 +30,18 @@ export function makeQueryClient(): QueryClient {
 
 export const QUERY_KEYS = {
   me: ["auth", "me"] as const,
+
+  // Public browse
+  routes: (p?: unknown) => ["routes", p ?? {}] as const,
+  route: (id: number) => ["routes", id] as const,
+  stops: (p?: unknown) => ["stops", p ?? {}] as const,
+  stop: (id: number) => ["stops", id] as const,
+
+  // Admin CRUD
+  adminRoutes: (p?: unknown) => ["admin", "routes", p ?? {}] as const,
+  adminBuses: (p?: unknown) => ["admin", "buses", p ?? {}] as const,
+  adminDrivers: (p?: unknown) => ["admin", "drivers", p ?? {}] as const,
+
+  // Driver picker for the assign-driver dialog
+  drivers: ["drivers"] as const,
 };

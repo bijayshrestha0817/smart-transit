@@ -32,6 +32,8 @@ from django.db import transaction
 
 from apps.accounts.enums import UserRole
 from apps.buses.models import Bus, BusStop, Route
+from apps.trips.enums import TripStatus
+from apps.trips.models import Trip
 
 User = get_user_model()
 
@@ -105,11 +107,12 @@ class Command(BaseCommand):
         users_created, drivers = self._seed_users()
         route_count, stop_count = self._seed_routes()
         bus_count = self._seed_buses(drivers)
+        trip_count = self._seed_trips()
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"Seed complete: +{users_created} users, +{route_count} routes, "
-                f"+{stop_count} stops, +{bus_count} buses. "
+                f"+{stop_count} stops, +{bus_count} buses, +{trip_count} trips. "
                 "(Existing rows left untouched — safe to re-run.)"
             )
         )
@@ -193,3 +196,23 @@ class Command(BaseCommand):
             )
             bus_count += int(b_created)
         return bus_count
+
+    @staticmethod
+    def _seed_trips() -> int:
+        # Two scheduled demo trips: pair driver-assigned buses with existing routes.
+        # driver = bus.assigned_driver, so the trip's driver matches the bus crew.
+        driver_buses = list(Bus.objects.filter(assigned_driver__isnull=False).order_by("plate")[:2])
+        routes = list(Route.objects.order_by("name")[:2])
+
+        trip_count = 0
+        for bus, route in zip(driver_buses, routes, strict=False):
+            _, t_created = Trip.objects.get_or_create(
+                bus=bus,
+                route=route,
+                defaults={
+                    "driver": bus.assigned_driver,
+                    "status": TripStatus.SCHEDULED,
+                },
+            )
+            trip_count += int(t_created)
+        return trip_count
