@@ -140,7 +140,7 @@ class BusService:
     def assign_driver(bus, driver_id):
         driver = DriverRepository.get_driver(driver_id)                   # repository owns the query
         if driver is None:
-            raise CustomException(message="No active driver with this id.", status=404, code="invalid_driver")
+            raise DriverNotFoundError()                                   # domain exception in apps/buses/exceptions.py
 ```
 
 ## 7. Throttle scopes are defined but not applied

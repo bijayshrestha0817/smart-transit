@@ -11,11 +11,13 @@ Django 6.0 / DRF 3.17 backend under `backend/`, organized in a **layered archite
 v1 versioning**. `.claude/CLAUDE.md` and `dev/memory/zero/CONTEXT.md` cover the rules and the
 project map — this skill gives you the **decision frameworks, patterns, and gotchas**.
 
-> **Canonical references — read these first when in doubt:**
-> - `apps/buses/repository/bus_repository.py` + `route_repository.py` — class-per-model data access.
-> - `apps/buses/v1/services/bus_service.py` + `route_service.py` — service classes (rules + transactions).
-> - `apps/buses/v1/views/bus_api.py` (admin ViewSet) + `route_api.py` (public generics) — thin views.
-> - `apps/accounts/v1/services/auth_service.py` + `views/auth_api.py` — auth flows, cookie-JWT.
+> **Canonical references — read these first when in doubt (PascalCase files, `service/` singular):**
+> - `apps/buses/repository/BusRepository.py` + `RouteRepository.py` — class-per-model data access.
+> - `apps/buses/v1/service/BusService.py` + `RouteService.py` — service classes (rules + transactions).
+> - `apps/buses/v1/views/BusViews.py` (admin ViewSet) + `RouteViews.py` (public generics + admin) — thin views.
+> - `apps/accounts/v1/service/AuthService.py` + `views/AuthViews.py` — auth flows, cookie-JWT.
+> - `apps/buses/enums.py` + `exceptions.py` — `TextChoices` enums (`BusStatus`, aliased `Bus.Status`) and
+>   domain exceptions (`DriverNotFoundError`); accounts mirrors this (`UserRole`, `InvalidCredentialsError`).
 > - `apps/common/` — `response.py` (CustomResponse), `exceptions.py` (CustomException + handler),
 >   `repository/base.py` (BaseRepository), pagination, permissions, soft-delete model.
 
@@ -24,21 +26,24 @@ project map — this skill gives you the **decision frameworks, patterns, and go
 ```
 apps/<app>/
   models.py                         # tables (inherit TimeStampedSoftDeleteModel)
-  repository/<model>_repository.py  # class per model — ALL ORM lives here
+  enums.py                          # TextChoices enums, aliased on the model (Bus.Status = BusStatus)
+  exceptions.py                     # domain CustomException subclasses (DriverNotFoundError, …)
+  urls.py                           # version dispatch: path("v1/", include("apps.<app>.v1.urls"))
+  repository/<Model>Repository.py   # class per model — ALL ORM lives here (PascalCase file)
   v1/
-    serializers/<x>.py              # validation + representation only
-    services/<x>_service.py         # business rules, transactions, CustomException
-    views/<x>_api.py                # thin: validate → service → CustomResponse
+    serializers/<Model>Serializer.py  # validation + representation only
+    service/<Domain>Service.py        # business rules, transactions, domain exceptions (service/ singular)
+    views/<Domain>Views.py            # thin: validate → service → CustomResponse
     urls.py
-config/urls.py  →  /api/v1/  includes apps.<app>.v1.urls
+config/urls.py  →  /api/  includes apps.<app>.urls  →  v1/  includes apps.<app>.v1.urls
 ```
 
 | It IS | It is NOT |
 |-------|-----------|
 | **Layered**: View → Service → Repository → Model, in **v1 packages** | flat — `apps/<app>/{views,services,serializers}.py` are gone |
 | `{data, meta, errors}` via **`CustomResponse`** (success) + **`CustomException`** + handler (errors) | hand-built envelopes; `CustomResponse`/`CustomException` **do exist** (`apps/common/`) |
-| **Repository = class per model**, owns ALL ORM | ORM inside views, services, or serializer methods |
-| **Services = `@staticmethod` classes**: rules, `transaction.atomic`, raise `CustomException` | business logic in views or module-level functions |
+| **Repository = class per model** (`<Model>Repository.py`), owns ALL ORM | ORM inside views, services, or serializer methods |
+| **Services = `@staticmethod` classes** in `v1/service/` (singular): rules, `transaction.atomic`, raise a domain exception | business logic in views or module-level functions |
 | **Single-tenant** Postgres + Redis | multi-tenant — no `django_tenants` / `tenant_context` / `TENANT_APPS` |
 | Soft delete via `TimeStampedSoftDeleteModel` | `simple_history`; no `created_by`/`updated_by` |
 | Celery + Channels **configured** | used yet — no `tasks.py` / consumers (P2/P5 work) |
@@ -48,11 +53,13 @@ config/urls.py  →  /api/v1/  includes apps.<app>.v1.urls
 ### "Where does this code go?"
 
 ```
-HTTP routing, status, which serializer/permission   → View (thin) — apps/<app>/v1/views/<x>_api.py
+HTTP routing, status, which serializer/permission   → View (thin) — apps/<app>/v1/views/<Domain>Views.py
 Input validation, field rules, uniqueness mirror     → Serializer (raise ValidationError code=)
-Business rule, state check, multi-step mutation, txn  → Service class (raise CustomException)
-ANY ORM — query, create, update, soft-delete          → Repository class (per model)
+Business rule, state check, multi-step mutation, txn  → Service class (raise a domain CustomException)
+ANY ORM — query, create, update, soft-delete          → Repository class (<Model>Repository.py, per model)
 Schema, constraints, choices, soft-delete behavior     → Model (inherit TimeStampedSoftDeleteModel)
+Choice enum (TextChoices)                              → apps/<app>/enums.py (aliased on the model)
+Reusable domain error                                  → apps/<app>/exceptions.py (CustomException subclass)
 Async / background job                                  → Celery task apps/<app>/tasks.py (none yet)
 Reused across apps (response, pagination, permissions)  → apps/common/
 ```
@@ -76,15 +83,15 @@ the serializer reads the prefetched attribute (`getattr(obj, "ordered_stops", []
 
 ```
 Input/field validation failure   → serializer raises serializers.ValidationError("msg", code="stable_code")
-Business-rule violation           → service raises CustomException(message=, status=, code=, errors=)
-Entity not found                  → repository returns None → service raises CustomException(message, status=404, code=)
+Business-rule violation           → service raises a domain exception (CustomException subclass in apps/<app>/exceptions.py)
+Entity not found                  → repository returns None → service raises e.g. DriverNotFoundError() (404)
 Not authenticated / perm denied   → NotAuthenticated / permission class returns False (auto 401/403)
 Unexpected server error           → let it bubble — handler returns None, Django emits a clean 500
 ```
 
-`apps/common/exceptions.py::envelope_exception_handler` converts **both** `CustomException` and DRF
-errors into the `{data, meta, errors}` error list `[{code, field, detail}]`. Never catch-and-format
-in a view; never assemble the envelope by hand.
+`apps/common/exceptions.py::envelope_exception_handler` converts **both** `CustomException` (and its
+subclasses) and DRF errors into the `{data, meta, errors}` error list `[{code, field, detail}]`. Never
+catch-and-format in a view; never assemble the envelope by hand.
 
 ## Patterns You Must Follow
 
@@ -113,15 +120,17 @@ class BusRepository(BaseRepository):
 ```
 
 `BaseRepository` (`apps/common/repository/base.py`) gives `active()`, `get_or_none()`, `apply_update()`.
-Rules: **one class per model**, `@classmethod`, **all ORM here**, no business rules, no DRF.
+Rules: **one class per model**, `@classmethod`, **all ORM here**, no business rules, no DRF. File is
+`repository/<Model>Repository.py`; re-export it from `repository/__init__.py`.
 
-### Service (class — rules, transactions, CustomException)
+### Service (class — rules, transactions, domain exceptions)
 
 ```python
+# apps/buses/v1/service/BusService.py
 from django.db import transaction
 
+from apps.buses.exceptions import DriverNotFoundError
 from apps.buses.repository import BusRepository, DriverRepository
-from apps.common.exceptions import CustomException
 
 
 class BusService:
@@ -129,15 +138,16 @@ class BusService:
     def assign_driver(bus, driver_id):
         driver = DriverRepository.get_driver(driver_id)
         if driver is None:
-            raise CustomException(message="No active driver with this id.", status=404, code="invalid_driver")
+            raise DriverNotFoundError()        # CustomException subclass → 404, code "invalid_driver"
         with transaction.atomic():
             bus.assigned_driver = driver
             bus.save(update_fields=["assigned_driver", "updated_at"])
         return bus
 ```
 
-Rules: **`@staticmethod` class**, `with transaction.atomic():` around multi-step mutations, raise
-`CustomException` for rule/state failures, **call repositories** (no direct ORM), **no DRF imports**.
+Rules: **`@staticmethod` class** in `v1/service/` (singular), `with transaction.atomic():` around
+multi-step mutations, raise a **domain exception** from `apps/<app>/exceptions.py` (a `CustomException`
+subclass) for rule/state failures, **call repositories** (no direct ORM), **no DRF imports**.
 
 ### Thin View
 
@@ -164,6 +174,7 @@ class RouteListView(ListAPIView):
 
 Rules: **thin** — validate via serializer → call service → return `CustomResponse`; `get_queryset()`
 sources from the repository; declare `permission_classes` explicitly; decorate with `@extend_schema`.
+View files are named per domain (`BusViews.py`, `RouteViews.py`, `StopViews.py`, `DriverViews.py`).
 
 ### Serializer (validation + representation only)
 
@@ -183,30 +194,43 @@ class BusWriteSerializer(serializers.ModelSerializer):
 ```
 
 Rules: **no `create`/`update` model methods** (views drive services); uniqueness mirror calls the
-repository; every `ValidationError` carries a stable `code=`. Split read vs write serializers.
+repository; every `ValidationError` carries a stable `code=`. Split read vs write serializers. File is
+`v1/serializers/<Model>Serializer.py`.
 
 ### CustomResponse / CustomException
 
 ```python
 from apps.common.response import CustomResponse        # success → {data, meta, errors}
-from apps.common.exceptions import CustomException      # service-raised domain error
+from apps.common.exceptions import CustomException      # base domain error
+from apps.buses.exceptions import DriverNotFoundError   # per-app subclass (preferred for recurring errors)
 
 return CustomResponse(BusSerializer(bus).data, status=status.HTTP_201_CREATED)
-raise CustomException(message="No active driver with this id.", status=404, code="invalid_driver")
+raise DriverNotFoundError()                                            # → 404, code "invalid_driver"
+raise CustomException(message="…", status=409, code="conflict")        # one-off, no dedicated subclass
 ```
 
 `CustomResponse` builds `{data, meta, errors}` (tagged `__enveloped__` so the renderer passes it
 through — the wire shape is identical to before). List/detail via DRF generics use the cursor
-paginator/renderer. `CustomException` is an `APIException` subclass; the handler flattens it.
+paginator/renderer. `CustomException` is an `APIException` subclass; per-app subclasses bake in the
+`message`/`status`/`code`. The handler flattens all of them.
 
 ### Model
 
 ```python
+# apps/buses/enums.py
+class BusStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    IDLE = "idle", "Idle"
+    MAINTENANCE = "maintenance", "Maintenance"
+    RETIRED = "retired", "Retired"
+
+# apps/buses/models.py
+from .enums import BusStatus
+
 class Bus(TimeStampedSoftDeleteModel):
-    class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        MAINTENANCE = "maintenance", "Maintenance"
+    Status = BusStatus  # enum lives in enums.py; aliased so Bus.Status.X keeps working
     plate = models.CharField(max_length=20)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.IDLE)
     assigned_driver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name="assigned_buses", limit_choices_to={"role": "driver"})
 
@@ -217,19 +241,22 @@ class Bus(TimeStampedSoftDeleteModel):
 ```
 
 Rules: **inherit `TimeStampedSoftDeleteModel`** (created_at/updated_at/is_deleted + soft-delete +
-`all_objects` escape hatch), set `db_table`, `TextChoices` enums, `DECIMAL(9,6)` coords,
-`on_delete=PROTECT` for reference data / `SET_NULL` for soft links, **partial unique constraints**
-(`condition=Q(is_deleted=False)`). No `created_by`/`updated_by`.
+`all_objects` escape hatch), set `db_table`, define `TextChoices` enums in `apps/<app>/enums.py` and
+**alias them on the model** (`Status = BusStatus`) so existing `Bus.Status.X` references and migrations
+are unaffected, `DECIMAL(9,6)` coords, `on_delete=PROTECT` for reference data / `SET_NULL` for soft
+links, **partial unique constraints** (`condition=Q(is_deleted=False)`). No `created_by`/`updated_by`.
 
 ### Auth & Permissions
 
 - JWTs are delivered **only** as HttpOnly cookies (`st_access`/`st_refresh`); `CookieJWTAuthentication`
-  reads the cookie or a `Bearer` header. Cookie mechanics live in `apps/accounts/v1/views/auth_api.py`;
-  business logic (credential + verified checks, reset) in `AuthService`. Email-verify / password-reset
-  use Django signed tokens (`apps/accounts/tokens.py`). SimpleJWT: 15 m / 7 d, rotation + blacklist.
+  reads the cookie or a `Bearer` header. Cookie mechanics live in `apps/accounts/v1/views/AuthViews.py`;
+  business logic (credential + verified checks via `InvalidCredentialsError`/`EmailNotVerifiedError`,
+  reset) in `AuthService` (`apps/accounts/v1/service/AuthService.py`). Email-verify / password-reset use
+  Django signed tokens (`apps/accounts/tokens.py`). SimpleJWT: 15 m / 7 d, rotation + blacklist.
 - RBAC via `apps/common/permissions.py` (`IsAdmin`/`IsDriver`/`IsPassenger`/`IsOwnerOrAdmin`) + `User.role`
-  (`passenger`/`driver`/`admin`). Default is `IsAuthenticated`; public reads override with `AllowAny`.
-  Drivers are `User` rows with `role=driver` — no separate Driver model.
+  (`passenger`/`driver`/`admin`; the `UserRole` enum is in `apps/accounts/enums.py`, aliased `User.Roles`).
+  Default is `IsAuthenticated`; public reads override with `AllowAny`. Drivers are `User` rows with
+  `role=driver` — no separate Driver model.
 
 ### Pagination / Filtering / Celery
 
@@ -246,8 +273,8 @@ Rules: **inherit `TimeStampedSoftDeleteModel`** (created_at/updated_at/is_delete
 ```python
 # Response / errors
 from apps.common.response import CustomResponse
-from apps.common.exceptions import CustomException
-from rest_framework import serializers              # serializers.ValidationError("msg", code="...")
+from apps.common.exceptions import CustomException          # base; prefer a per-app subclass for recurring errors
+from rest_framework import serializers                      # serializers.ValidationError("msg", code="...")
 
 # Repository / service base
 from apps.common.repository import BaseRepository
@@ -284,6 +311,8 @@ from celery import shared_task                        # no tasks exist yet
    view sets `throttle_scope = "<role>"`; only `AnonRateThrottle` (30/min) is live.
 9. **Schema warning / endpoint missing from `/api/docs/`?** Add `@extend_schema`; the cookie-JWT scheme
    is registered in `apps/accounts/schema.py` via `AccountsConfig.ready()`.
+10. **New endpoint 404s?** Check all three URL layers: `v1/urls.py` (route), `apps/<app>/urls.py`
+    (version dispatch, `path("v1/", …)`), and `config/urls.py` (mounts the app at `/api/`).
 
 ## After Writing Code
 
@@ -305,5 +334,5 @@ and `apps/accounts/tests/test_auth.py`.
 
 See [GOTCHAS.md](GOTCHAS.md) — all grounded in this codebase: `User.objects` doesn't hide soft-deleted
 rows; partial-unique serializer mirror (via repository); never hand-build the envelope (use `CustomResponse`
-/ raise `CustomException`); missing `transaction.atomic()` in services; N+1 fixed in the repository;
+/ raise a domain `CustomException`); missing `transaction.atomic()` in services; N+1 fixed in the repository;
 throttle scopes defined-but-inert; assert `resp.json()` not `resp.data`.

@@ -11,8 +11,8 @@ skill is the **analysis workflow** for finding and fixing N+1 query issues in th
 
 > **Where queries live here:** this project uses a **layered architecture** —
 > `View → Service (optional) → Repository → Model`. All ORM lives exclusively in
-> `apps/<app>/repository/<model>_repository.py` (one class per model, inheriting
-> `BaseRepository` from `apps/common/repository/base.py`). Optimizations
+> `apps/<app>/repository/<Model>Repository.py` (one class per model, PascalCase filename,
+> inheriting `BaseRepository` from `apps/common/repository/base.py`). Optimizations
 > (`select_related`/`prefetch_related`/`annotate`) go in the **repository's queryset
 > methods** — never in the view, never in a serializer method. Views call a repository
 > method and return the resulting queryset; serializers read whatever was prefetched.
@@ -27,16 +27,16 @@ skill is the **analysis workflow** for finding and fixing N+1 query issues in th
 
 Trace the request path from URL to database (4 layers):
 
-1. **View** — find the view class/method (`apps/<app>/v1/views/<x>_api.py`). Its
+1. **View** — find the view class/method (`apps/<app>/v1/views/<Domain>Views.py`). Its
    `get_queryset()` returns a repository queryset; views themselves contain no ORM.
 2. **Service** *(optional)* — if the view delegates writes/logic to
-   `apps/<app>/v1/services/<x>_service.py`, read that class for any cross-row
+   `apps/<app>/v1/service/<Domain>Service.py`, read that class for any cross-row
    query calls.
-3. **Repository** — the real queryset owner: `apps/<app>/repository/<model>_repository.py`.
+3. **Repository** — the real queryset owner: `apps/<app>/repository/<Model>Repository.py`.
    This is where `select_related`, `prefetch_related`, and `annotate` are defined.
 4. **Serializer** — the response serializer and any nested serializers
-   (`apps/<app>/v1/serializers/<x>.py`). It reads fields/attributes; it must not issue
-   any ORM calls.
+   (`apps/<app>/v1/serializers/<Model>Serializer.py`). It reads fields/attributes; it must
+   not issue any ORM calls.
 
 The N+1 risk lives in the gap between what the **serializer accesses** and what the
 **repository's queryset method prefetches**.
@@ -57,7 +57,7 @@ Build the list of **all relation paths the serializer will trigger**.
 
 ## Step 3: Audit the Repository Queryset
 
-Read the repository class (`apps/<app>/repository/<model>_repository.py`) that the view
+Read the repository class (`apps/<app>/repository/<Model>Repository.py`) that the view
 calls and extract the queryset method's actual content:
 
 1. **`select_related()`** paths — e.g. `BusRepository.active()` returns
@@ -77,10 +77,10 @@ Compare serializer access (Step 2) against queryset optimization (Step 3):
 ## N+1 Query Analysis: <ViewClass.method>
 
 ### Request Path
-View:       apps/<app>/v1/views/<x>_api.py → <ViewClass> (get_queryset)
-Service:    apps/<app>/v1/services/<x>_service.py → <ClassName>   (if any)
-Repository: apps/<app>/repository/<model>_repository.py → <RepositoryClass>.<method>
-Serializer: apps/<app>/v1/serializers/<x>.py → <SerializerClass>
+View:       apps/<app>/v1/views/<Domain>Views.py → <ViewClass> (get_queryset)
+Service:    apps/<app>/v1/service/<Domain>Service.py → <ClassName>   (if any)
+Repository: apps/<app>/repository/<Model>Repository.py → <RepositoryClass>.<method>
+Serializer: apps/<app>/v1/serializers/<Model>Serializer.py → <SerializerClass>
 
 ### Findings
 | # | Severity | Relation Path | Accessed By | Fix |
@@ -147,7 +147,7 @@ For full fix patterns (annotate vs prefetch vs compute-in-service), see
 ## Rules
 
 1. **Fix in the repository layer** — optimizations go in the **model repository's queryset methods**
-   (`apps/<app>/repository/<model>_repository.py`). Never add `select_related`/`prefetch_related` to
+   (`apps/<app>/repository/<Model>Repository.py`). Never add `select_related`/`prefetch_related` to
    the view or the serializer. For cross-row computation (annotations, subqueries), the repository is
    still the right place; the service may call a repository method to obtain an annotated queryset.
 2. **Trace the real code** — read the actual view, repository, service, and serializer before
@@ -165,12 +165,12 @@ The domain is small today (`Route`, `BusStop`, `Bus`, `User`), so the useful cha
 These patterns are grounded in the real repository classes:
 
 ```python
-# apps/buses/repository/bus_repository.py — BusRepository.active()
+# apps/buses/repository/BusRepository.py — BusRepository.active()
 # assigned_driver is a forward FK shown via BusSerializer.assigned_driver_email
 # (source="assigned_driver.email") — must be selected or every row hits the DB.
 Bus.objects.select_related("assigned_driver")   # already in BusRepository.active()
 
-# apps/buses/repository/route_repository.py — RouteRepository.detail_queryset()
+# apps/buses/repository/RouteRepository.py — RouteRepository.detail_queryset()
 # Route detail needs stops in sequence order; to_attr avoids a second .order_by() in
 # the serializer. RouteDetailSerializer.get_stops reads getattr(obj, "ordered_stops", []).
 from django.db.models import Prefetch
@@ -198,20 +198,24 @@ any ORM calls.
 ### Discover Hotspots Live
 
 Don't trust a hardcoded list — it rots as fixes land and as new apps (`trips`, `tickets`, …) arrive.
-Grep, then trace each candidate through Steps 1–6:
+Grep the **layered paths** (there are no flat `apps/<app>/serializers.py`/`views.py`/`services.py`
+files — all ORM is split across `v1/serializers/`, `v1/views/`, `v1/service/`, and `repository/`),
+then trace each candidate through Steps 1–6:
 
 ```bash
 # from backend/ — SerializerMethodField / serializer bodies hitting the DB (highest yield)
-git grep -nE 'obj\.\w+\.(filter|first|last|count|exists|order_by|aggregate)\(' -- 'apps/*/serializers.py'
-git grep -nE '\.objects\.(filter|get|first|count|exists)\(' -- 'apps/*/serializers.py'
+git grep -nE 'obj\.\w+\.(filter|first|last|count|exists|order_by|aggregate)\(' -- 'apps/*/v1/serializers/*.py'
+git grep -nE '\.objects\.(filter|get|first|count|exists)\(' -- 'apps/*/v1/serializers/*.py'
 
-# View querysets with no select_related/prefetch_related while serializing relations
-git grep -nE 'queryset = \w+\.objects\.(all|filter)\(' -- 'apps/*/views.py'
-git grep -nE '\.objects\.(get|first)\(' -- 'apps/*/services.py'
+# Repository querysets returning related objects with no select_related/prefetch_related
+git grep -nE '\.objects\.(all|filter)\(' -- 'apps/*/repository/*.py'
+
+# ORM that leaked OUT of the repository (it shouldn't be in a view or service)
+git grep -nE '\.objects\.(get|first|filter|all)\(' -- 'apps/*/v1/views/*.py' 'apps/*/v1/service/*.py'
 ```
 
 Order findings by blast radius: **list endpoints first** (every issue × `page_size`), then **detail**
 endpoints, then **Celery tasks** that loop over many rows (none exist yet — relevant from P2+).
 
 Skip false positives: `obj.related.all()` after `prefetch_related("related")` is fine — verify against
-the view's queryset before flagging.
+the repository queryset method before flagging.

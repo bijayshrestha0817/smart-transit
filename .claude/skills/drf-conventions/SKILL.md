@@ -10,37 +10,44 @@ user-invokable: true
 debugging. **This skill is the actionable recipe book**: how to add or change a DRF
 endpoint in this codebase, with copy-paste-true imports and patterns.
 
-> **Reference files — copy these, don't invent:**
-> - `apps/buses/v1/views/bus_api.py`, `route_api.py`, `stop_api.py` — public reads (generics),
->   admin CRUD (`ModelViewSet` + `@action`), service-backed mutations via `CustomResponse`.
-> - `apps/buses/repository/` — `BusRepository`, `RouteRepository`, `BusStopRepository`, `DriverRepository`.
-> - `apps/buses/v1/services/` — `BusService`, `RouteService` (service classes with `@staticmethod`).
+> **Reference files — copy these, don't invent (PascalCase filenames, `service/` singular):**
+> - `apps/buses/v1/views/BusViews.py`, `RouteViews.py`, `StopViews.py`, `DriverViews.py` — public
+>   reads (generics), admin CRUD (`ModelViewSet` + `@action`), service-backed mutations via `CustomResponse`.
+> - `apps/buses/repository/BusRepository.py`, `RouteRepository.py`, `BusStopRepository.py`, `DriverRepository.py`.
+> - `apps/buses/v1/service/BusService.py`, `RouteService.py`, `DriverService.py` — service classes with `@staticmethod`.
+> - `apps/buses/enums.py` + `exceptions.py` — `TextChoices` enums (e.g. `BusStatus`, aliased `Bus.Status`)
+>   and domain exceptions (`DriverNotFoundError`, a `CustomException` subclass).
 > - `apps/accounts/v1/views/` + `serializers/` — `APIView` flows, cookie-JWT, signed tokens.
 > - `apps/common/` — `CustomResponse`, `CustomException`, `EnvelopeJSONRenderer`,
 >   `envelope_exception_handler`, `BaseRepository`, pagination, permissions.
 
-## Layout (layered — `v1/`, `repository/`, `services/` packages per app)
+## Layout (layered — `v1/`, `repository/`, `service/` packages per app)
 
 Call flow: **View → Service → Repository → Model**. Serializers handle I/O only.
+Files are **PascalCase with a type suffix** (`BusRepository.py`, `BusService.py`,
+`BusSerializer.py`, `BusViews.py`); the service package is **singular** (`service/`).
 
 ```
 apps/<app>/
   models.py
+  enums.py                          # TextChoices enums (e.g. BusStatus, aliased on the model as Bus.Status)
+  exceptions.py                     # domain exceptions: CustomException subclasses (e.g. DriverNotFoundError)
+  urls.py                           # version dispatch: path("v1/", include("apps.<app>.v1.urls"))
   repository/
     __init__.py                     # re-exports all repository classes
-    <model>_repository.py           # ONE class per model: class XRepository(BaseRepository)
+    <Model>Repository.py            # ONE class per model: class XRepository(BaseRepository)
   v1/
     __init__.py
     urls.py                         # DefaultRouter for ViewSets + path() for generics; app_name set
     serializers/
       __init__.py
-      <model>.py                    # read/write/action serializers; validation only
-    services/
+      <Model>Serializer.py          # read/write/action serializers; validation only
+    service/                        # singular
       __init__.py
-      <x>_service.py                # class XService with @staticmethod methods
+      <Domain>Service.py            # class XService with @staticmethod methods
     views/
       __init__.py
-      <x>_api.py                    # thin views: generics / ModelViewSet
+      <Domain>Views.py              # thin views: generics / ModelViewSet
   admin.py, tests/, management/commands/
 ```
 
@@ -51,20 +58,26 @@ the soft-delete base model).
 ## Steps to Add an Endpoint
 
 1. **Model** (if new) in `apps/<app>/models.py` — inherit `TimeStampedSoftDeleteModel`,
-   set `db_table`, use `TextChoices`, partial unique constraints (`condition=Q(is_deleted=False)`).
-2. **Repository** in `apps/<app>/repository/<model>_repository.py` — subclass `BaseRepository`,
+   set `db_table`, use `TextChoices` (define them in `apps/<app>/enums.py` and alias on the model,
+   e.g. `Status = BusStatus`), partial unique constraints (`condition=Q(is_deleted=False)`).
+2. **Repository** in `apps/<app>/repository/<Model>Repository.py` — subclass `BaseRepository`,
    set `model = X`, add `@classmethod` query methods with `select_related`/`prefetch_related`.
-   ALL ORM lives here; no direct `Model.objects` access outside a repository.
-3. **Service** in `apps/<app>/v1/services/<x>_service.py` — a class with `@staticmethod` methods.
-   Business rules, state checks, `with transaction.atomic():`, raise `CustomException`. Call
-   repositories. No direct ORM, no DRF imports.
-4. **Serializer(s)** in `apps/<app>/v1/serializers/<model>.py` — validation + representation only
-   (no `create`/`update` model methods; views drive services). Uniqueness checks call the repository.
-5. **View** in `apps/<app>/v1/views/<x>_api.py` — pick a generic or `ModelViewSet` (below);
+   ALL ORM lives here; no direct `Model.objects` access outside a repository. Re-export from
+   `repository/__init__.py`.
+3. **Service** in `apps/<app>/v1/service/<Domain>Service.py` (`service/` is singular) — a class with
+   `@staticmethod` methods. Business rules, state checks, `with transaction.atomic():`, raise a domain
+   exception from `apps/<app>/exceptions.py` (a `CustomException` subclass). Call repositories. No
+   direct ORM, no DRF imports.
+4. **Serializer(s)** in `apps/<app>/v1/serializers/<Model>Serializer.py` — validation + representation
+   only (no `create`/`update` model methods; views drive services). Uniqueness checks call the repository.
+5. **View** in `apps/<app>/v1/views/<Domain>Views.py` — pick a generic or `ModelViewSet` (below);
    set `permission_classes` and `@extend_schema`. `get_queryset()` calls the repository.
    Mutations: validate → service → `CustomResponse`.
 6. **URL** in `apps/<app>/v1/urls.py` — `DefaultRouter` for ViewSets, `path()` for generics.
-7. **Mount** in `config/urls.py` → `api_v1_patterns` (once per app, under `/api/v1/`).
+7. **Dispatch + mount** (new app only — both existing apps are already wired): the app's
+   `apps/<app>/urls.py` includes the version (`path("v1/", include("apps.<app>.v1.urls"))`); then
+   `config/urls.py` mounts the app once at `/api/` (`path("api/", include("apps.<app>.urls"))`). The
+   net public surface stays `/api/v1/…`.
 
 ## Import Paths
 
@@ -81,11 +94,12 @@ from apps.common.response import CustomResponse          # builds {data, meta, e
 
 # Domain exceptions — raised by services, converted to {errors:[...]} by the handler
 from apps.common.exceptions import CustomException      # APIException subclass; CustomException(message=, status=, code=)
+from apps.buses.exceptions import DriverNotFoundError   # per-app subclass with the message/status/code baked in
 
 # Repository base class (subclass in each app's repository/)
 from apps.common.repository import BaseRepository
 
-# Per-app repository imports (example: buses)
+# Per-app repository imports (example: buses) — re-exported from repository/__init__.py
 from apps.buses.repository import BusRepository, RouteRepository, BusStopRepository, DriverRepository
 
 # Permissions (default is IsAuthenticated; opt into these per view)
@@ -124,9 +138,11 @@ return CustomResponse(BusSerializer(bus).data, status=status.HTTP_201_CREATED)
 return CustomResponse(BusSerializer(bus).data, message="Driver assigned.")
 return CustomResponse(BusSerializer(bus).data)   # 200 by default
 
-# Error from a service — raise CustomException (no try/except in views)
-from apps.common.exceptions import CustomException
+# Error from a service — raise a domain exception (no try/except in views)
+from apps.buses.exceptions import DriverNotFoundError   # CustomException subclass in apps/<app>/exceptions.py
 
+raise DriverNotFoundError()                              # → status 404, code "invalid_driver"
+# one-off without a dedicated subclass:
 raise CustomException(message="No active driver with this id.", status=404, code="invalid_driver")
 
 # Error from a serializer — raise ValidationError with a stable code=
@@ -140,7 +156,8 @@ Rules:
 - **Never** build the `{data, meta, errors}` dict by hand and **never** `try/except` to format
   errors in a view — raise and let the handler do it.
 - **Always** attach a stable machine `code=` (`duplicate_plate`, `token_expired`,
-  `invalid_driver`, …) so the frontend can branch on it.
+  `invalid_driver`, …) so the frontend can branch on it. Bake recurring ones into a
+  `CustomException` subclass in `apps/<app>/exceptions.py`.
 - Lists routed through a pagination class are auto-wrapped to `{data: [...], meta: {pagination}}`.
 
 ## View Patterns
@@ -148,7 +165,7 @@ Rules:
 ### Public read (generics — `get_queryset()` from repository)
 
 ```python
-# apps/buses/v1/views/route_api.py
+# apps/buses/v1/views/RouteViews.py
 @extend_schema(tags=["routes"])
 class RouteListView(ListAPIView):
     """`GET /routes/` — list/search routes (public)."""
@@ -176,7 +193,7 @@ class RouteDetailView(RetrieveAPIView):
 ### Admin CRUD (ModelViewSet — validate → service → CustomResponse)
 
 ```python
-# apps/buses/v1/views/bus_api.py
+# apps/buses/v1/views/BusViews.py
 @extend_schema_view(
     list=extend_schema(tags=["admin-buses"]),
     retrieve=extend_schema(tags=["admin-buses"]),
@@ -233,6 +250,7 @@ envelope construction. Declare `permission_classes` on **every** view.
 ## Repository Conventions
 
 - **One class per model**, subclasses `BaseRepository` from `apps/common/repository/base.py`.
+  File is `repository/<Model>Repository.py`.
 - Set `model = X` on the class. All query methods are `@classmethod`.
 - `BaseRepository` provides: `active()` (excludes soft-deleted), `get_or_none(**filters)`,
   `apply_update(instance, data)` (PATCH idiom with `update_fields`).
@@ -242,7 +260,7 @@ envelope construction. Declare `permission_classes` on **every** view.
   `plate_exists()`, `nearby()`. Services and views call these; no raw `Model.objects` elsewhere.
 
 ```python
-# apps/buses/repository/bus_repository.py
+# apps/buses/repository/BusRepository.py
 class BusRepository(BaseRepository):
     model = Bus
 
@@ -260,22 +278,23 @@ class BusRepository(BaseRepository):
 
 ## Service Conventions
 
-- **Classes with `@staticmethod` methods**, one file per domain (e.g. `BusService`, `RouteService`).
-- Business rules and state checks live here. Raise `CustomException` (not DRF exceptions) when a
-  rule is violated.
+- **Classes with `@staticmethod` methods**, one file per domain in `v1/service/` (singular) — e.g.
+  `BusService.py`, `RouteService.py`.
+- Business rules and state checks live here. Raise a **domain exception** from `apps/<app>/exceptions.py`
+  (a `CustomException` subclass, e.g. `DriverNotFoundError`) — not DRF exceptions — when a rule is violated.
 - Every mutation is wrapped in `with transaction.atomic():`.
 - No direct ORM access — call repository methods. No DRF imports.
 
 ```python
-# apps/buses/v1/services/bus_service.py
+# apps/buses/v1/service/BusService.py
+from apps.buses.exceptions import DriverNotFoundError
+
 class BusService:
     @staticmethod
     def assign_driver(bus: Bus, driver_id: int) -> Bus:
         driver = DriverRepository.get_driver(driver_id)
         if driver is None:
-            raise CustomException(
-                message="No active driver with this id.", status=404, code="invalid_driver"
-            )
+            raise DriverNotFoundError()        # CustomException subclass → 404, code "invalid_driver"
         with transaction.atomic():
             bus.assigned_driver = driver
             bus.save(update_fields=["assigned_driver", "updated_at"])
@@ -293,7 +312,7 @@ class BusService:
   check uniqueness via the **repository** in `validate_<field>`:
 
 ```python
-# apps/buses/v1/serializers/bus.py
+# apps/buses/v1/serializers/BusSerializer.py
 class BusWriteSerializer(serializers.ModelSerializer):
     plate = serializers.CharField(max_length=20)   # plain → no surprise auto-validator
 
@@ -342,7 +361,7 @@ class RouteListSerializer(serializers.ModelSerializer):
 Annotations belong in a **repository** method. The view calls that method from `get_queryset()`.
 
 ```python
-# apps/buses/repository/route_repository.py
+# apps/buses/repository/RouteRepository.py
 @classmethod
 def annotated_list(cls):
     from django.db.models import Count, Exists, OuterRef
@@ -366,7 +385,7 @@ example: it uses `Prefetch("stops", queryset=BusStop.objects.order_by("sequence"
 The `RouteDetailSerializer` reads the cached attribute — zero DB hits in the serializer.
 
 ```python
-# apps/buses/repository/route_repository.py — already done
+# apps/buses/repository/RouteRepository.py — already done
 @classmethod
 def detail_queryset(cls):
     return Route.objects.prefetch_related(
@@ -377,7 +396,7 @@ def detail_queryset(cls):
         )
     )
 
-# apps/buses/v1/serializers/route.py — reads the prefetched attr
+# apps/buses/v1/serializers/RouteSerializer.py — reads the prefetched attr
 class RouteDetailSerializer(serializers.ModelSerializer):
     stops = serializers.SerializerMethodField()
 
@@ -429,7 +448,7 @@ class AdminBusViewSet(ModelViewSet):
 ```
 
 For a structured/custom query param, override `get_queryset()` and raise a clean `ValidationError`
-with a `code=` on bad input (see `StopListView` in `apps/buses/v1/views/stop_api.py` parsing
+with a `code=` on bad input (see `StopListView` in `apps/buses/v1/views/StopViews.py` parsing
 `?near=lat,lng&radius=`). A `django_filters` `FilterSet` is available if a view ever needs
 range/relational filters — add it then, scoped to that view.
 
@@ -444,13 +463,20 @@ range/relational filters — add it then, scoped to that view.
 
 ## URL Wiring
 
+Three layers: `config/urls.py` mounts each app at `/api/`; the app's `urls.py` dispatches the
+**version**; `v1/urls.py` holds the routes. Net public surface stays `/api/v1/…`.
+
 ```
 config/urls.py
-  /admin/                         → Django admin
-  /api/v1/                        → api_v1_patterns:
-      auth/   → apps.accounts.v1.urls    (APIViews via path())
-      ""      → apps.buses.v1.urls       (DefaultRouter for ViewSets + path() for generics)
-  /api/schema/  /api/docs/        → drf-spectacular
+  /admin/                          → Django admin
+  /api/   → apps.accounts.urls     →  v1/auth/ → apps.accounts.v1.urls   (APIViews via path())
+  /api/   → apps.buses.urls        →  v1/      → apps.buses.v1.urls      (DefaultRouter + path() generics)
+  /api/schema/  /api/docs/         → drf-spectacular
+
+apps/<app>/urls.py                 # version dispatch
+  buses:    path("v1/", include("apps.buses.v1.urls"))
+  accounts: path("v1/auth/", include("apps.accounts.v1.urls"))   # accounts owns the auth/ prefix here
+  # path("v2/", …)  ← add when v2 lands; config/urls.py doesn't change
 ```
 
 In an app's `v1/urls.py`: set `app_name`, register ViewSets on a `DefaultRouter`
