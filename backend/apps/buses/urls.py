@@ -1,29 +1,11 @@
-"""Routes/stops + admin CRUD, mounted at /api/v1/."""
+"""Buses app URL entry point — dispatches to versioned sub-APIs.
 
-from django.urls import path
-from rest_framework.routers import DefaultRouter
+Mounted by config at /api/, so v1 endpoints resolve under /api/v1/.
+"""
 
-from .views import (
-    AdminBusViewSet,
-    AdminDriverViewSet,
-    AdminRouteViewSet,
-    RouteDetailView,
-    RouteListView,
-    StopDetailView,
-    StopListView,
-)
-
-app_name = "buses"
-
-router = DefaultRouter()
-router.register("admin/routes", AdminRouteViewSet, basename="admin-route")
-router.register("admin/buses", AdminBusViewSet, basename="admin-bus")
-router.register("admin/drivers", AdminDriverViewSet, basename="admin-driver")
+from django.urls import include, path
 
 urlpatterns = [
-    path("routes/", RouteListView.as_view(), name="route-list"),
-    path("routes/<int:pk>/", RouteDetailView.as_view(), name="route-detail"),
-    path("stops/", StopListView.as_view(), name="stop-list"),
-    path("stops/<int:pk>/", StopDetailView.as_view(), name="stop-detail"),
-    *router.urls,
+    path("v1/", include("apps.buses.v1.urls")),
+    # path("v2/", include("apps.buses.v2.urls")),  # add when v2 lands
 ]

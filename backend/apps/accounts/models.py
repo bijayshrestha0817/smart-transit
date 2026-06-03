@@ -10,14 +10,12 @@ default manager (for ``createsuperuser``). Soft-deleting a user also sets
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 
+from .enums import UserRole
 from .managers import UserManager
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    class Roles(models.TextChoices):
-        PASSENGER = "passenger", "Passenger"
-        DRIVER = "driver", "Driver"
-        ADMIN = "admin", "Admin"
+    Roles = UserRole  # enum lives in enums.py; aliased so User.Roles.X keeps working
 
     email = models.EmailField(unique=True, db_index=True)
     full_name = models.CharField(max_length=150, blank=True)
