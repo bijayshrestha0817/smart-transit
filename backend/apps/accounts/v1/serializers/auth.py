@@ -1,20 +1,13 @@
-"""Serializers for auth flows. Validation lives here; views stay thin."""
+"""Auth-flow input serializers. Validation lives here; credential/state checks and
+mutations live in AuthService."""
 
-from django.contrib.auth import authenticate, get_user_model, password_validation
+from django.contrib.auth import get_user_model, password_validation
 from rest_framework import serializers
 
-from . import tokens
+from apps.accounts import tokens
+from apps.accounts.repository import AccountRepository
 
 User = get_user_model()
-
-
-class UserSerializer(serializers.ModelSerializer):
-    """Public representation of a user (no secrets)."""
-
-    class Meta:
-        model = User
-        fields = ("id", "email", "full_name", "phone", "role", "is_verified", "created_at")
-        read_only_fields = fields
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -26,7 +19,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value: str) -> str:
         value = value.lower()
-        if User.objects.filter(email=value).exists():
+        if AccountRepository.email_exists(value):
             raise serializers.ValidationError("A user with this email already exists.")
         return value
 
@@ -34,31 +27,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         password_validation.validate_password(value)
         return value
 
-    def create(self, validated_data):
-        # New registrations are always passengers and start unverified.
-        return User.objects.create_user(role=User.Roles.PASSENGER, **validated_data)
-
 
 class LoginSerializer(serializers.Serializer):
+    # Pure input shape — AuthService.login does the credential + verified checks.
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, style={"input_type": "password"})
-
-    def validate(self, attrs):
-        user = authenticate(
-            self.context.get("request"),
-            username=attrs["email"].lower(),
-            password=attrs["password"],
-        )
-        if user is None:
-            raise serializers.ValidationError(
-                "Invalid email or password.", code="invalid_credentials"
-            )
-        if not user.is_verified:
-            raise serializers.ValidationError(
-                "Please verify your email before logging in.", code="not_verified"
-            )
-        attrs["user"] = user
-        return attrs
 
 
 class EmailVerifySerializer(serializers.Serializer):

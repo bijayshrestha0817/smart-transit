@@ -1,4 +1,4 @@
-"""Routes/stops + admin CRUD, mounted at /api/v1/."""
+"""Routes/stops + admin CRUD (v1), mounted at /api/v1/."""
 
 from django.urls import path
 from rest_framework.routers import DefaultRouter

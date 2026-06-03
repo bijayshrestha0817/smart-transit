@@ -5,7 +5,28 @@ a flat list of ``{code, field, detail}`` objects with stable machine-readable
 codes the frontend can branch on.
 """
 
+from rest_framework.exceptions import APIException
 from rest_framework.views import exception_handler as drf_exception_handler
+
+
+class CustomException(APIException):
+    """Domain exception raised by the service layer.
+
+    A subclass of DRF's ``APIException`` so the standard exception handler picks it up
+    and ``status`` flows through. Carry an optional pre-built ``errors`` list (each
+    ``{code, field, detail}``) when a service wants to emit structured field errors;
+    otherwise the ``message`` becomes a single error entry.
+    """
+
+    status_code = 400
+    default_detail = "A business rule was violated."
+    default_code = "error"
+
+    def __init__(self, message=None, status=None, errors=None, code=None):
+        if status is not None:
+            self.status_code = status
+        self.errors = errors
+        super().__init__(detail=message or self.default_detail, code=code or self.default_code)
 
 
 def envelope_exception_handler(exc, context):
@@ -14,10 +35,16 @@ def envelope_exception_handler(exc, context):
         # Unhandled exception -> let Django produce a 500 (no internals leaked).
         return None
 
+    if isinstance(exc, CustomException) and exc.errors is not None:
+        # Service supplied a ready-made error list (or a field dict to flatten).
+        errors = exc.errors if isinstance(exc.errors, list) else _normalize(exc.errors)
+    else:
+        errors = _normalize(response.data)
+
     response.data = {
         "data": None,
         "meta": None,
-        "errors": _normalize(response.data),
+        "errors": errors,
         "__enveloped_error__": True,  # signals the renderer to pass through
     }
     return response

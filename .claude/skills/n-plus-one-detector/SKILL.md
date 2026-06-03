@@ -9,11 +9,13 @@ user-invokable: true
 `.claude/CLAUDE.md`, `django-expert`, and `drf-conventions` cover the architecture. This
 skill is the **analysis workflow** for finding and fixing N+1 query issues in this codebase.
 
-> **Where queries live here:** this project has a flat layout — `apps/<app>/{views,serializers,services,models}.py`.
-> There is **no `repository/` layer**. A queryset is defined on the **view** (`queryset = …`
-> or `get_queryset()`); optimizations (`select_related`/`prefetch_related`/`annotate`) go
-> **there**, or — for cross-row logic — in a `services.py` function. Never put query logic in a
-> serializer method.
+> **Where queries live here:** this project uses a **layered architecture** —
+> `View → Service (optional) → Repository → Model`. All ORM lives exclusively in
+> `apps/<app>/repository/<model>_repository.py` (one class per model, inheriting
+> `BaseRepository` from `apps/common/repository/base.py`). Optimizations
+> (`select_related`/`prefetch_related`/`annotate`) go in the **repository's queryset
+> methods** — never in the view, never in a serializer method. Views call a repository
+> method and return the resulting queryset; serializers read whatever was prefetched.
 
 ## When to Use
 
@@ -23,14 +25,21 @@ skill is the **analysis workflow** for finding and fixing N+1 query issues in th
 
 ## Step 1: Identify the Target Endpoint
 
-Trace the request path from URL to database (3 hops here, not 4 — no repository):
+Trace the request path from URL to database (4 layers):
 
-1. **View** — find the view class/method (`apps/<app>/views.py`) and its `queryset` / `get_queryset()`.
-2. **Service** *(optional)* — if the view delegates to `apps/<app>/services.py`, read that function.
-3. **Serializer** — the response serializer and any nested serializers (`apps/<app>/serializers.py`).
+1. **View** — find the view class/method (`apps/<app>/v1/views/<x>_api.py`). Its
+   `get_queryset()` returns a repository queryset; views themselves contain no ORM.
+2. **Service** *(optional)* — if the view delegates writes/logic to
+   `apps/<app>/v1/services/<x>_service.py`, read that class for any cross-row
+   query calls.
+3. **Repository** — the real queryset owner: `apps/<app>/repository/<model>_repository.py`.
+   This is where `select_related`, `prefetch_related`, and `annotate` are defined.
+4. **Serializer** — the response serializer and any nested serializers
+   (`apps/<app>/v1/serializers/<x>.py`). It reads fields/attributes; it must not issue
+   any ORM calls.
 
 The N+1 risk lives in the gap between what the **serializer accesses** and what the
-**view's queryset prefetches**.
+**repository's queryset method prefetches**.
 
 ## Step 2: Map Serializer Field Access
 
@@ -46,13 +55,18 @@ Classify every serializer field that touches a relationship:
 
 Build the list of **all relation paths the serializer will trigger**.
 
-## Step 3: Audit the View's Queryset
+## Step 3: Audit the Repository Queryset
 
-Read the view's `queryset` / `get_queryset()` and extract:
+Read the repository class (`apps/<app>/repository/<model>_repository.py`) that the view
+calls and extract the queryset method's actual content:
 
-1. **`select_related()`** paths (e.g. `AdminBusViewSet` → `Bus.objects.select_related("assigned_driver")`).
-2. **`prefetch_related()`** paths, including custom `Prefetch` objects.
-3. **Annotations / Subqueries** — computed at the DB (no N+1 risk).
+1. **`select_related()`** paths — e.g. `BusRepository.active()` returns
+   `Bus.objects.select_related("assigned_driver")`.
+2. **`prefetch_related()`** paths, including custom `Prefetch` objects — e.g.
+   `RouteRepository.detail_queryset()` uses
+   `Prefetch("stops", queryset=BusStop.objects.order_by("sequence"), to_attr="ordered_stops")`.
+3. **Annotations / Subqueries** — computed at the DB (no N+1 risk). These also belong
+   in the repository.
 4. **`only()` / `defer()`** field restrictions.
 
 ## Step 4: Diff and Report
@@ -63,21 +77,22 @@ Compare serializer access (Step 2) against queryset optimization (Step 3):
 ## N+1 Query Analysis: <ViewClass.method>
 
 ### Request Path
-View:       apps/<app>/views.py → <ViewClass> (queryset / get_queryset)
-Service:    apps/<app>/services.py → <function>   (if any)
-Serializer: apps/<app>/serializers.py → <SerializerClass>
+View:       apps/<app>/v1/views/<x>_api.py → <ViewClass> (get_queryset)
+Service:    apps/<app>/v1/services/<x>_service.py → <ClassName>   (if any)
+Repository: apps/<app>/repository/<model>_repository.py → <RepositoryClass>.<method>
+Serializer: apps/<app>/v1/serializers/<x>.py → <SerializerClass>
 
 ### Findings
 | # | Severity | Relation Path | Accessed By | Fix |
 |---|----------|---------------|-------------|-----|
-| 1 | HIGH   | assigned_driver | BusSerializer.assigned_driver_email (source) | add to select_related |
-| 2 | MEDIUM | stops           | RouteDetailSerializer.get_stops (method)     | prefetch_related |
+| 1 | HIGH   | assigned_driver | BusSerializer.assigned_driver_email (source) | add to select_related in BusRepository.active() |
+| 2 | MEDIUM | stops           | RouteDetailSerializer.get_stops (method)     | add Prefetch in RouteRepository.detail_queryset() |
 
 ### Already Optimized
-- assigned_driver — select_related ✓   (AdminBusViewSet)
+- assigned_driver — select_related ✓   (BusRepository.active())
 
 ### Suggested Fix
-<exact queryset change on the view (or get_queryset)>
+<exact queryset change in the repository method — NOT in the view>
 ```
 
 ### Severity Levels
@@ -92,13 +107,15 @@ Serializer: apps/<app>/serializers.py → <SerializerClass>
 ## Step 5: Check for Anti-Patterns
 
 1. **Query in a serializer method** — any `.objects.filter()/.get()/.first()` or `obj.<related>.filter()`
-   inside `get_<field>`. Fix: move to a queryset `annotate`/`Prefetch`, or compute in a service.
-2. **Bare view queryset** — `queryset = Model.objects.all()` while the serializer touches relations.
-   Fix: add `select_related`/`prefetch_related` to the view's `queryset`/`get_queryset()`.
-3. **Missing FK depth** — `select_related("a")` when the serializer reads `a.b.field`. Fix: `select_related("a__b")`.
-4. **String prefetch where a filter/order is needed** — use `Prefetch(..., queryset=...)` instead.
+   inside `get_<field>`. Fix: move logic to a `Prefetch`/`annotate` in the repository method, then
+   read the prefetched attribute in the serializer (e.g. `getattr(obj, "ordered_stops", [])`).
+2. **Bare repository queryset** — `Model.objects.all()` (or `Model.objects.filter(...)` without
+   optimizations) while the serializer touches relations. Fix: add `select_related`/`prefetch_related`
+   to the relevant repository queryset method. Never add ORM calls to the view itself.
+3. **Missing FK depth** — `select_related("a")` when the serializer reads `a.b.field`. Fix: `select_related("a__b")` in the repository.
+4. **String prefetch where a filter/order is needed** — use `Prefetch(..., queryset=...)` in the repository instead of a plain string.
 5. **Annotation opportunity** — a `SerializerMethodField` doing a simple count/exists that a single
-   `Count`/`Exists` annotation would replace.
+   `Count`/`Exists` annotation would replace. Annotation belongs in the repository.
 
 ## Step 6: Scan SerializerMethodField Bodies (highest-yield)
 
@@ -117,47 +134,66 @@ Serializer: apps/<app>/serializers.py → <SerializerClass>
 `obj.<related>.all()` **after** a matching `prefetch_related("<related>")` is fine. Plain
 attribute access (`obj.fk.field`) is fine when the FK is `select_related`'d — just confirm the chain.
 
-> Real example: `RouteDetailSerializer.get_stops` does `obj.stops.all().order_by("sequence")`. On the
-> **detail** view (one Route) that's one extra query — acceptable. If the same serializer were used on
-> a **list**, it'd be HIGH-severity N+1 → prefetch `Prefetch("stops", queryset=BusStop.objects.order_by("sequence"))`.
+> Real example: `RouteDetailSerializer.get_stops` reads `getattr(obj, "ordered_stops", [])` —
+> a Python attribute, no DB hit — because `RouteRepository.detail_queryset()` already prefetched
+> `Prefetch("stops", queryset=BusStop.objects.order_by("sequence"), to_attr="ordered_stops")`.
+> This is the correct pattern. If a future serializer were to call `obj.stops.all().order_by("sequence")`
+> instead, it would be a HIGH-severity N+1 on a list endpoint → fix by ensuring the repository
+> sets `to_attr` and the serializer reads the attribute.
 
 For full fix patterns (annotate vs prefetch vs compute-in-service), see
 `drf-conventions` → "SerializerMethodField — N+1 Rules".
 
 ## Rules
 
-1. **Fix at the queryset** — optimizations go on the **view's `queryset`/`get_queryset()`** (or a
-   `services.py` function for cross-row computation). Never add query logic to serializer methods.
-2. **Trace the real code** — read the actual view, service, and serializer before reporting. Don't guess.
+1. **Fix in the repository layer** — optimizations go in the **model repository's queryset methods**
+   (`apps/<app>/repository/<model>_repository.py`). Never add `select_related`/`prefetch_related` to
+   the view or the serializer. For cross-row computation (annotations, subqueries), the repository is
+   still the right place; the service may call a repository method to obtain an annotated queryset.
+2. **Trace the real code** — read the actual view, repository, service, and serializer before
+   reporting. Don't guess.
 3. **List vs detail matters** — a missing `select_related` on a list endpoint (N rows) is HIGH; on a
    detail endpoint (1 row) it's MEDIUM.
 4. **Count queries, not relations** — a `SerializerMethodField` running a query per row is worse than a
    single missing `select_related`.
-5. **Preserve existing optimizations** — show the full updated `select_related`/`prefetch_related` call,
-   not just the new paths.
+5. **Preserve existing optimizations** — show the full updated `select_related`/`prefetch_related` call
+   inside the repository method, not just the new paths.
 
 ## Project-Specific Patterns
 
-The domain is small today (`Route`, `BusStop`, `Bus`, `User`), so the useful chains are short:
+The domain is small today (`Route`, `BusStop`, `Bus`, `User`), so the useful chains are short.
+These patterns are grounded in the real repository classes:
 
 ```python
-# Buses list/detail — driver is a forward FK shown via assigned_driver_email
-Bus.objects.select_related("assigned_driver")               # AdminBusViewSet already does this
+# apps/buses/repository/bus_repository.py — BusRepository.active()
+# assigned_driver is a forward FK shown via BusSerializer.assigned_driver_email
+# (source="assigned_driver.email") — must be selected or every row hits the DB.
+Bus.objects.select_related("assigned_driver")   # already in BusRepository.active()
 
-# Routes list — counts/booleans as annotations (no per-row queries)
+# apps/buses/repository/route_repository.py — RouteRepository.detail_queryset()
+# Route detail needs stops in sequence order; to_attr avoids a second .order_by() in
+# the serializer. RouteDetailSerializer.get_stops reads getattr(obj, "ordered_stops", []).
+from django.db.models import Prefetch
+Route.objects.prefetch_related(
+    Prefetch(
+        "stops",
+        queryset=BusStop.objects.order_by("sequence"),
+        to_attr="ordered_stops",
+    )
+)
+
+# Annotation example (add to RouteRepository if needed by a list serializer)
+# Avoids one COUNT and one EXISTS per row on list endpoints.
 from django.db.models import Count, Exists, OuterRef
 Route.objects.annotate(
     stop_count=Count("stops"),
     has_stops=Exists(BusStop.objects.filter(route=OuterRef("pk"))),
 )
-
-# Route detail — ordered child rows via a filtered Prefetch
-from django.db.models import Prefetch
-Route.objects.prefetch_related(
-    Prefetch("stops", queryset=BusStop.objects.order_by("sequence"), to_attr="ordered_stops"),
-)
-# serializer then reads obj.ordered_stops (no DB hit)
 ```
+
+All three patterns belong **in the repository** — the view's `get_queryset()` simply
+returns `RouteRepository.detail_queryset()` or `BusRepository.active()` without adding
+any ORM calls.
 
 ### Discover Hotspots Live
 

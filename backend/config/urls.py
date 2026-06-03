@@ -6,8 +6,8 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 # /api/v1/* — versioned API surface. New apps add their routers here as they land.
 api_v1_patterns = [
-    path("auth/", include("apps.accounts.urls")),
-    path("", include("apps.buses.urls")),
+    path("auth/", include("apps.accounts.v1.urls")),
+    path("", include("apps.buses.v1.urls")),
 ]
 
 urlpatterns = [

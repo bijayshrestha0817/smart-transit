@@ -22,6 +22,9 @@ class EnvelopeJSONRenderer(JSONRenderer):
         if isinstance(data, dict) and data.pop("__enveloped_error__", False):
             # Already shaped by the exception handler.
             payload = data
+        elif isinstance(data, dict) and data.pop("__enveloped__", False):
+            # Already shaped by CustomResponse — pass through untouched.
+            payload = data
         elif isinstance(data, dict) and data.pop("__paginated__", False):
             payload = {
                 "data": data["results"],
