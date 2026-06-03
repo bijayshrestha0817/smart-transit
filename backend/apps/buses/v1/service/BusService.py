@@ -2,9 +2,9 @@
 
 from django.db import transaction
 
+from apps.buses.exceptions import DriverNotFoundError
 from apps.buses.models import Bus
 from apps.buses.repository import BusRepository, DriverRepository
-from apps.common.exceptions import CustomException
 
 
 class BusService:
@@ -22,9 +22,7 @@ class BusService:
     def assign_driver(bus: Bus, driver_id: int) -> Bus:
         driver = DriverRepository.get_driver(driver_id)
         if driver is None:
-            raise CustomException(
-                message="No active driver with this id.", status=404, code="invalid_driver"
-            )
+            raise DriverNotFoundError()
         with transaction.atomic():
             bus.assigned_driver = driver
             bus.save(update_fields=["assigned_driver", "updated_at"])

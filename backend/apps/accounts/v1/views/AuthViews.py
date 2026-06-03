@@ -24,7 +24,7 @@ from apps.accounts.v1.serializers import (
     ResetPasswordSerializer,
     UserSerializer,
 )
-from apps.accounts.v1.services import AuthService
+from apps.accounts.v1.service import AuthService
 from apps.common.response import CustomResponse
 
 _ACCESS_MAX_AGE = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())

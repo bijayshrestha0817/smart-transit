@@ -14,6 +14,8 @@ from django.db.models import Q
 
 from apps.common.models import TimeStampedSoftDeleteModel
 
+from .enums import BusStatus
+
 # Hex colour like ``#1E88E5`` (3- or 6-digit) — drives the per-route map polyline.
 HEX_COLOR_VALIDATOR = RegexValidator(
     regex=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
@@ -68,11 +70,7 @@ class Bus(TimeStampedSoftDeleteModel):
     """A fleet vehicle. ``assigned_driver`` is nullable so a bus survives driver
     reassignment (``SET_NULL``)."""
 
-    class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        IDLE = "idle", "Idle"
-        MAINTENANCE = "maintenance", "Maintenance"
-        RETIRED = "retired", "Retired"
+    Status = BusStatus  # enum lives in enums.py; aliased so Bus.Status.X keeps working
 
     plate = models.CharField(max_length=20)
     capacity = models.PositiveIntegerField()

@@ -1,4 +1,4 @@
-from .auth_api import (
+from .AuthViews import (
     ForgotPasswordView,
     LoginView,
     LogoutView,
@@ -7,7 +7,7 @@ from .auth_api import (
     ResetPasswordView,
     VerifyEmailView,
 )
-from .me_api import MeView
+from .MeViews import MeView
 
 __all__ = [
     "ForgotPasswordView",

@@ -20,7 +20,7 @@ from apps.buses.v1.serializers import (
     RouteListSerializer,
     RouteWriteSerializer,
 )
-from apps.buses.v1.services import RouteService
+from apps.buses.v1.service import RouteService
 from apps.common.permissions import IsAdmin
 from apps.common.response import CustomResponse
 

@@ -6,8 +6,8 @@ from django.core.mail import send_mail
 from django.db import transaction
 
 from apps.accounts import tokens
+from apps.accounts.exceptions import EmailNotVerifiedError, InvalidCredentialsError
 from apps.accounts.repository import AccountRepository
-from apps.common.exceptions import CustomException
 
 
 class AuthService:
@@ -28,15 +28,9 @@ class AuthService:
     def login(request, email: str, password: str):
         user = authenticate(request, username=email.lower(), password=password)
         if user is None:
-            raise CustomException(
-                message="Invalid email or password.", status=400, code="invalid_credentials"
-            )
+            raise InvalidCredentialsError()
         if not user.is_verified:
-            raise CustomException(
-                message="Please verify your email before logging in.",
-                status=400,
-                code="not_verified",
-            )
+            raise EmailNotVerifiedError()
         return user
 
     @staticmethod

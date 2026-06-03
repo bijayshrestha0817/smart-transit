@@ -6,7 +6,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from apps.buses.repository import DriverRepository
 from apps.buses.v1.serializers import DriverSerializer, DriverWriteSerializer
-from apps.buses.v1.services import DriverService
+from apps.buses.v1.service import DriverService
 from apps.common.permissions import IsAdmin
 from apps.common.response import CustomResponse
 

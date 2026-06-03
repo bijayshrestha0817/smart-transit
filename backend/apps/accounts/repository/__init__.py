@@ -1,3 +1,3 @@
-from .account_repository import AccountRepository
+from .AccountRepository import AccountRepository
 
 __all__ = ["AccountRepository"]

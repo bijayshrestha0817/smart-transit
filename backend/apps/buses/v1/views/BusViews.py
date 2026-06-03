@@ -12,7 +12,7 @@ from apps.buses.v1.serializers import (
     BusWriteSerializer,
     MaintenanceSerializer,
 )
-from apps.buses.v1.services import BusService
+from apps.buses.v1.service import BusService
 from apps.common.permissions import IsAdmin
 from apps.common.response import CustomResponse
 

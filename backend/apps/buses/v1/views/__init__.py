@@ -1,7 +1,7 @@
-from .bus_api import AdminBusViewSet
-from .driver_api import AdminDriverViewSet
-from .route_api import AdminRouteViewSet, RouteDetailView, RouteListView
-from .stop_api import StopDetailView, StopListView
+from .BusViews import AdminBusViewSet
+from .DriverViews import AdminDriverViewSet
+from .RouteViews import AdminRouteViewSet, RouteDetailView, RouteListView
+from .StopViews import StopDetailView, StopListView
 
 __all__ = [
     "AdminBusViewSet",

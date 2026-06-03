@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from apps.buses.models import Route
 
-from .bus_stop import BusStopSerializer
+from .BusStopSerializer import BusStopSerializer
 
 
 class RouteListSerializer(serializers.ModelSerializer):

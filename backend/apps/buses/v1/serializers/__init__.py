@@ -1,12 +1,12 @@
-from .bus import (
+from .BusSerializer import (
     AssignDriverSerializer,
     BusSerializer,
     BusWriteSerializer,
     MaintenanceSerializer,
 )
-from .bus_stop import AssignStopsSerializer, BusStopSerializer
-from .driver import DriverSerializer, DriverWriteSerializer
-from .route import RouteDetailSerializer, RouteListSerializer, RouteWriteSerializer
+from .BusStopSerializer import AssignStopsSerializer, BusStopSerializer
+from .DriverSerializer import DriverSerializer, DriverWriteSerializer
+from .RouteSerializer import RouteDetailSerializer, RouteListSerializer, RouteWriteSerializer
 
 __all__ = [
     "AssignDriverSerializer",
