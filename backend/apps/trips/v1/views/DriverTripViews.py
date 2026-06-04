@@ -1,13 +1,14 @@
-"""Driver trip lifecycle — retrieve own trip + start / end / passenger-count / gps batch.
+"""Driver trip lifecycle — list/retrieve own trips + start / end / passenger-count / gps batch.
 
 The queryset is scoped to the requesting driver, so ``get_object`` 404s on trips the
-driver doesn't own. The service ALSO re-asserts the driver as a defence-in-depth check.
+driver doesn't own and ``list`` only ever returns the driver's own trips. The service
+ALSO re-asserts the driver as a defence-in-depth check.
 """
 
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.mixins import RetrieveModelMixin
+from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 
 from apps.common.permissions import IsDriver
 from apps.common.response import CustomResponse
@@ -21,13 +22,18 @@ from apps.trips.v1.service import TripService
 
 
 @extend_schema_view(
+    list=extend_schema(tags=["driver-trips"]),
     retrieve=extend_schema(tags=["driver-trips"]),
 )
-class DriverTripViewSet(RetrieveModelMixin, viewsets.GenericViewSet):
-    """`/driver/trips/{id}/` — the driver's own trips + lifecycle actions."""
+class DriverTripViewSet(ListModelMixin, RetrieveModelMixin, viewsets.GenericViewSet):
+    """`/driver/trips/` (list own) + `/driver/trips/{id}/` (retrieve) + lifecycle actions."""
 
     permission_classes = [IsDriver]
     serializer_class = TripSerializer
+    # The driver discovers their own assigned trips here; `?status=` narrows by lifecycle
+    # state (e.g. scheduled vs in_progress). Same global cursor pagination as the admin list.
+    filterset_fields = ["status"]
+    ordering_fields = ["status", "start_time", "created_at"]
 
     def get_queryset(self):
         # During schema generation there's no request user — return the base queryset

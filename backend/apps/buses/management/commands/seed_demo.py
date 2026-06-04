@@ -50,12 +50,13 @@ DEMO_USERS = [
     ("rider.three@smart-transit.ai", UserRole.PASSENGER, "Gita Rider", "+9779800000006"),
 ]
 
-# (name, color, estimated_duration_minutes, [(stop_name, lat, lng), ...])
+# (name, color, estimated_duration_minutes, fare, [(stop_name, lat, lng), ...])
 ROUTES = [
     (
         "Ring Road",
         "#1E88E5",
         55,
+        "35.00",
         [
             ("Koteshwor", "27.678900", "85.347800"),
             ("Tinkune", "27.685300", "85.348900"),
@@ -69,6 +70,7 @@ ROUTES = [
         "Lagankhel–Ratnapark",
         "#E53935",
         35,
+        "25.00",
         [
             ("Lagankhel", "27.667100", "85.323900"),
             ("Kupondole", "27.685800", "85.316700"),
@@ -81,6 +83,7 @@ ROUTES = [
         "Bhaktapur–Kathmandu",
         "#43A047",
         50,
+        "45.00",
         [
             ("Bhaktapur", "27.671000", "85.428500"),
             ("Jadibuti", "27.679800", "85.353800"),
@@ -165,12 +168,20 @@ class Command(BaseCommand):
 
     def _seed_routes(self) -> tuple[int, int]:
         route_count = stop_count = 0
-        for name, color, duration, stops in ROUTES:
+        for name, color, duration, fare, stops in ROUTES:
             route, created = Route.objects.get_or_create(
                 name=name,
-                defaults={"color": color, "estimated_duration": duration},
+                defaults={
+                    "color": color,
+                    "estimated_duration": duration,
+                    "fare": Decimal(fare),
+                },
             )
             route_count += int(created)
+            # Converge fare on an existing demo route (idempotent re-run).
+            if not created and route.fare != Decimal(fare):
+                route.fare = Decimal(fare)
+                route.save(update_fields=["fare", "updated_at"])
             for sequence, (stop_name, lat, lng) in enumerate(stops, start=1):
                 _, s_created = BusStop.objects.get_or_create(
                     route=route,

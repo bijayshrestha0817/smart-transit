@@ -177,6 +177,48 @@ def test_driver_can_retrieve_own_trip(client, driver, trip):
     assert resp.json()["data"]["id"] == trip.id
 
 
+@pytest.mark.django_db
+def test_driver_list_returns_only_own_trips(client, driver, other_driver, route, bus, trip):
+    # A trip owned by another driver must never appear in this driver's list.
+    other_trip = Trip.objects.create(bus=bus, route=route, driver=other_driver)
+    client.force_authenticate(user=driver)
+    resp = client.get(DRIVER_TRIPS_URL)
+    assert resp.status_code == 200
+    envelope = resp.json()
+    assert isinstance(envelope["data"], list)
+    assert envelope["meta"]["pagination"]["page_size"] == 20
+    ids = {t["id"] for t in envelope["data"]}
+    assert trip.id in ids
+    assert other_trip.id not in ids
+
+
+@pytest.mark.django_db
+def test_driver_list_filters_by_status(client, driver, route, bus):
+    scheduled = Trip.objects.create(bus=bus, route=route, driver=driver)
+    in_progress = Trip.objects.create(
+        bus=bus, route=route, driver=driver, status=TripStatus.IN_PROGRESS
+    )
+    client.force_authenticate(user=driver)
+    resp = client.get(DRIVER_TRIPS_URL, {"status": TripStatus.IN_PROGRESS})
+    assert resp.status_code == 200
+    ids = {t["id"] for t in resp.json()["data"]}
+    assert ids == {in_progress.id}
+    assert scheduled.id not in ids
+
+
+@pytest.mark.django_db
+def test_driver_list_requires_auth(client):
+    assert client.get(DRIVER_TRIPS_URL).status_code == 401
+
+
+@pytest.mark.django_db
+def test_driver_list_forbidden_for_passenger_and_admin(client, passenger, admin):
+    client.force_authenticate(user=passenger)
+    assert client.get(DRIVER_TRIPS_URL).status_code == 403
+    client.force_authenticate(user=admin)
+    assert client.get(DRIVER_TRIPS_URL).status_code == 403
+
+
 # ── RBAC: driver lifecycle is driver-only ────────────────────────────────────
 @pytest.mark.django_db
 def test_driver_start_requires_auth(client, trip):

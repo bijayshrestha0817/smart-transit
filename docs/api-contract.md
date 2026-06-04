@@ -197,8 +197,18 @@ cursor pagination.
 
 ## 8. WebSocket channels
 
-ASGI base path `/ws/`. **JWT validated on `connect`** (cookie or `?token=`); failure →
-`close(4401)`. Reconnect is client-side with exponential backoff + heartbeat.
+ASGI base path `/ws/`. **JWT validated on `connect`** (cookie or `?token=`). Auth/authz
+happens once, at the handshake — a long-open socket is never dropped mid-stream. Reconnect
+is client-side with exponential backoff + heartbeat.
+
+**Close codes** mirror the HTTP `401`/`403` semantics from §9 into the WebSocket `44xx`
+private-use range:
+
+| Code | HTTP analog | When | Client reaction |
+|------|-------------|------|-----------------|
+| `4401` | `401` | unauthenticated — no/expired JWT at handshake | refresh the cookie once (`GET /auth/me/`, which triggers the `401`→`/auth/refresh/` interceptor) then reconnect; a second `4401` means refresh failed → stop, session expired (redirect to `/login`) |
+| `4403` | `403` | authenticated but not authorized for this channel — wrong role, or not this trip's driver (also returned for a missing trip, so existence isn't leaked) | stop, no retry |
+| other (incl. `1006`) | — | transient transport drop | reconnect with exponential backoff + jitter, capped |
 
 | Channel | Direction | Who | Payload |
 |---------|-----------|-----|---------|

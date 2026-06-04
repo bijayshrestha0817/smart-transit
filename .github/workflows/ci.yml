@@ -69,5 +69,11 @@ jobs:
       - name: ESLint
         run: npm run lint
 
-      - name: Next build (type-check + bundle)
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Next build (bundle)
         run: npm run build

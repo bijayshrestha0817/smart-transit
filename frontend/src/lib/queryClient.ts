@@ -44,4 +44,12 @@ export const QUERY_KEYS = {
 
   // Driver picker for the assign-driver dialog
   drivers: ["drivers"] as const,
+
+  // Trips (P2 real-time)
+  adminTrips: (p?: unknown) => ["admin", "trips", p ?? {}] as const,
+  adminTrip: (id: number) => ["admin", "trips", id] as const,
+  driverTrips: (p?: unknown) => ["driver", "trips", p ?? {}] as const,
+  driverTrip: (id: number) => ["driver", "trips", id] as const,
+  activeTrips: (routeId: number) => ["trips", "active", routeId] as const,
+  fleet: ["admin", "fleet"] as const,
 };

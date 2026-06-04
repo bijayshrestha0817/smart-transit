@@ -1,18 +1,3 @@
-"""WebSocket consumers — the realtime equivalent of DRF views.
-
-They stay thin: authenticate/authorize in ``connect()``, fan out + delegate domain
-work to ``TripService``. Domain logic and persistence live in the service layer, never
-here. All consumers speak JSON via ``AsyncJsonWebsocketConsumer``.
-
-Close codes (api-contract §8): ``4401`` = unauthenticated, ``4403`` = authenticated but
-not allowed on this channel.
-
-The GPS pipeline (architecture §4): on each inbound point we **fan out first** (to the
-trip group and the fleet group) so passengers see movement with minimal latency, then
-**buffer** the point and flush to the DB in batches to keep write amplification down on
-the high-frequency ``gps_locations`` table.
-"""
-
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.utils import timezone
@@ -28,7 +13,8 @@ from .groups import ALERTS, FLEET, notifications_group, trip_group
 # flushes any remainder, so no points are lost between flush boundaries.
 GPS_FLUSH_SIZE = 10
 
-# WebSocket close codes (api-contract §8).
+# WebSocket close codes — private-use 4000–4999 range (api-contract §8). NOT HTTP codes:
+# 4401/4403 echo HTTP 401/403, but the leading "4" keeps them valid WS close codes.
 CLOSE_UNAUTHENTICATED = 4401
 CLOSE_FORBIDDEN = 4403
 

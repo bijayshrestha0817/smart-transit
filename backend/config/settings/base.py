@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.buses",
     "apps.trips",
+    "apps.payments",
 ]
 
 MIDDLEWARE = [
@@ -198,6 +199,10 @@ SPECTACULAR_SETTINGS = {
     "ENUM_NAME_OVERRIDES": {
         "BusStatusEnum": "apps.buses.enums.BusStatus.choices",
         "TripStatusEnum": "apps.trips.enums.TripStatus.choices",
+        "TicketStatusEnum": "apps.payments.enums.TicketStatus.choices",
+        "PaymentGatewayEnum": "apps.payments.enums.PaymentGateway.choices",
+        "PaymentStatusEnum": "apps.payments.enums.PaymentStatus.choices",
+        "WalletTxnKindEnum": "apps.payments.enums.WalletTxnKind.choices",
     },
 }
 

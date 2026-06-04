@@ -19,17 +19,18 @@ const ROLE_LABEL: Record<UserRole, string> = {
   admin: "Operator",
 };
 
-/** Primary nav per role. Driver portal arrives in P2, so it has no links yet. */
+/** Primary nav per role. */
 const NAV_BY_ROLE: Record<UserRole, { href: string; label: string }[]> = {
   passenger: [
     { href: "/passenger/routes", label: "Routes" },
     { href: "/passenger/stops", label: "Stops" },
   ],
-  driver: [],
+  driver: [{ href: "/driver", label: "Trips" }],
   admin: [
     { href: "/admin/routes", label: "Routes" },
     { href: "/admin/buses", label: "Buses" },
     { href: "/admin/drivers", label: "Drivers" },
+    { href: "/admin/fleet", label: "Fleet" },
   ],
 };
 

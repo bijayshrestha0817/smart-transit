@@ -7,8 +7,10 @@ the diagram's conventions: ``DECIMAL(9,6)`` coordinates, ``TextChoices`` enums,
 (e.g. a plate or a stop sequence).
 """
 
+from decimal import Decimal
+
 from django.conf import settings
-from django.core.validators import RegexValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models import Q
 
@@ -32,6 +34,14 @@ class Route(TimeStampedSoftDeleteModel):
     polyline_json = models.JSONField(default=list, blank=True)
     estimated_duration = models.PositiveIntegerField(help_text="Baseline duration in minutes.")
     color = models.CharField(max_length=7, validators=[HEX_COLOR_VALIDATOR])
+    # Server-authoritative ride price; ``Ticket.fare`` snapshots this at issue time.
+    # Must be > 0 so an admin/seed can never push a free or negative fare into the money path.
+    fare = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
 
     class Meta(TimeStampedSoftDeleteModel.Meta):
         db_table = "routes"

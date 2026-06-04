@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft, MapPin } from "lucide-react";
 
+import { RouteLiveSection } from "@/components/route-live-section";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getRoute } from "@/lib/api/routes";
@@ -79,9 +80,7 @@ function RouteContent({ route }: { route: RouteDetail }) {
         </CardContent>
       </Card>
 
-      <p className="label-mono text-[0.6rem] text-muted-foreground">
-        Live map view arrives with real-time tracking.
-      </p>
+      <RouteLiveSection routeId={route.id} stops={route.stops} />
     </div>
   );
 }
