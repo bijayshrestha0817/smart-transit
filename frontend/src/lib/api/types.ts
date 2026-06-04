@@ -162,3 +162,85 @@ export interface ActiveTrip {
   trip: Trip;
   last_position: LastPosition | null;
 }
+
+// ── Ticketing / payments (P4) ─────────────────────────────────────────────────
+
+/** Ticket lifecycle (`TicketStatus`). */
+export type TicketStatus =
+  | "issued"
+  | "active"
+  | "used"
+  | "expired"
+  | "refunded"
+  | "cancelled";
+
+/** Payment gateways (`PaymentGateway`). Only `wallet` settles end-to-end this slice. */
+export type PaymentGateway = "khalti" | "esewa" | "stripe" | "wallet";
+
+/** Payment lifecycle (`PaymentStatus`). */
+export type PaymentStatus = "pending" | "success" | "failed" | "refunded";
+
+/** Wallet ledger entry kind (`WalletTxnKind`). */
+export type WalletTxnKind = "credit" | "debit";
+
+/** A purchased ride ticket (`TicketSerializer`). `fare` is a decimal STRING. */
+export interface Ticket {
+  id: number;
+  passenger: number;
+  trip: number;
+  route_name: string;
+  /** Signed QR token to render as a QR code. */
+  qr_code: string;
+  status: TicketStatus;
+  /** Decimal string, e.g. "25.00". */
+  fare: string;
+  payment_status: PaymentStatus;
+  gateway: PaymentGateway;
+  created_at: string;
+}
+
+/** An append-only wallet ledger row (`WalletTransactionSerializer`). Amounts are decimal STRINGS. */
+export interface WalletTransaction {
+  id: number;
+  kind: WalletTxnKind;
+  /** Positive magnitude, decimal string. */
+  amount: string;
+  /** Balance snapshot after this row, decimal string. */
+  balance_after: string;
+  /** Free-form origin, e.g. "ticket:123" or "refund:123". */
+  reference: string;
+  /** Linked payment id, or null. */
+  payment: number | null;
+  created_at: string;
+}
+
+/** The checkout descriptor returned by `POST /payments/checkout/`. */
+export interface CheckoutResult {
+  txn_ref: string;
+  gateway: PaymentGateway;
+  status: PaymentStatus;
+  checkout_ref: string | null;
+}
+
+// ── Notifications (P5) ────────────────────────────────────────────────────────
+
+/** Notification kinds (`NotificationType`). */
+export type NotificationType =
+  | "bus_arriving"
+  | "route_delay"
+  | "emergency"
+  | "maintenance_due"
+  | "trip_completed";
+
+/**
+ * An in-app notification (`NotificationSerializer`). Named `AppNotification` to avoid
+ * clashing with the DOM `Notification` global. `read_at` is null while unread;
+ * `payload_json` is free-form, type-specific data (e.g. `{ trip_id, route_name }`).
+ */
+export interface AppNotification {
+  id: number;
+  type: NotificationType;
+  payload_json: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
+}

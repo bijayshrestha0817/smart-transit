@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 
 import { Brand } from "@/components/brand";
 import { LogoutButton } from "@/components/logout-button";
+import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { UserRole } from "@/lib/api/types";
 import { dashboardPath } from "@/lib/auth-routes";
@@ -24,6 +25,8 @@ const NAV_BY_ROLE: Record<UserRole, { href: string; label: string }[]> = {
   passenger: [
     { href: "/passenger/routes", label: "Routes" },
     { href: "/passenger/stops", label: "Stops" },
+    { href: "/passenger/tickets", label: "Tickets" },
+    { href: "/passenger/wallet", label: "Wallet" },
   ],
   driver: [{ href: "/driver", label: "Trips" }],
   admin: [
@@ -113,6 +116,7 @@ export function DashboardShell({
             <span className="hidden text-sm text-muted-foreground sm:inline">
               {user.email}
             </span>
+            <NotificationBell />
             <ThemeToggle />
             <LogoutButton />
           </div>

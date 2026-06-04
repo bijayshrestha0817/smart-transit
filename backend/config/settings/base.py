@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.trips",
     "apps.payments",
     "apps.notifications",
+    "apps.driver_logs",
 ]
 
 MIDDLEWARE = [
@@ -205,6 +206,7 @@ SPECTACULAR_SETTINGS = {
         "PaymentStatusEnum": "apps.payments.enums.PaymentStatus.choices",
         "WalletTxnKindEnum": "apps.payments.enums.WalletTxnKind.choices",
         "NotificationTypeEnum": "apps.notifications.enums.NotificationType.choices",
+        "DriverLogEventTypeEnum": "apps.driver_logs.enums.DriverLogEventType.choices",
     },
 }
 

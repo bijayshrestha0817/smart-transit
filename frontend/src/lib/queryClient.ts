@@ -52,4 +52,11 @@ export const QUERY_KEYS = {
   driverTrip: (id: number) => ["driver", "trips", id] as const,
   activeTrips: (routeId: number) => ["trips", "active", routeId] as const,
   fleet: ["admin", "fleet"] as const,
+
+  // Ticketing / wallet / notifications (P4/P5)
+  tickets: (p?: unknown) => ["tickets", p ?? {}] as const,
+  ticket: (id: number) => ["tickets", id] as const,
+  wallet: ["wallet"] as const,
+  walletTxns: (p?: unknown) => ["wallet", "transactions", p ?? {}] as const,
+  notifications: (p?: unknown) => ["notifications", p ?? {}] as const,
 };
