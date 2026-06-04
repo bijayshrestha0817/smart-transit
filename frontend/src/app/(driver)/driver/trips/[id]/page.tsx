@@ -36,6 +36,7 @@ import {
 } from "@/lib/realtime/messages";
 import { enqueueGps, flushGps, pendingCount } from "@/lib/realtime/gps-queue";
 import { QUERY_KEYS } from "@/lib/queryClient";
+import { passengerCountSchema } from "@/lib/validation/trips";
 import { cn } from "@/lib/utils";
 
 const CONN: Record<SocketStatus, { label: string; cls: string }> = {
@@ -374,8 +375,7 @@ function PassengerCountControl({
     onError: (err) => toast.error(toApiError(err).message),
   });
 
-  const parsed = Number(value);
-  const invalid = value === "" || !Number.isInteger(parsed) || parsed < 0;
+  const invalid = value === "" || !passengerCountSchema.safeParse({ count: value }).success;
 
   return (
     <Card>

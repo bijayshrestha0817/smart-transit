@@ -570,7 +570,7 @@ Email uses the console backend in dev (links print to stdout); wire SMTP via set
 ### Option A — Docker Compose (recommended)
 
 Brings up Postgres + Redis, runs migrations once, then starts the backend processes (HTTP, WS,
-Celery worker, beat) and the Next.js frontend. Run from the **repo root**:
+Celery worker, beat). Run from the **repo root**:
 
 ```bash
 docker compose up --build
@@ -582,7 +582,6 @@ docker compose up --build
 | `ws` | ws://localhost:9000 — Daphne ASGI (consumers land in P2) |
 | `worker` / `beat` | Celery worker + scheduler |
 | `postgres` / `redis` | `localhost:5432` / `localhost:6379` |
-| `frontend` | http://localhost:3000 — Next.js dev server |
 
 The `migrate` service is one-shot (`depends_on … service_completed_successfully`), so the app
 services only start once the schema is applied. The `web` service has an HTTP healthcheck against

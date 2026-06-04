@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "apps.buses",
     "apps.trips",
     "apps.payments",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [
@@ -203,6 +204,7 @@ SPECTACULAR_SETTINGS = {
         "PaymentGatewayEnum": "apps.payments.enums.PaymentGateway.choices",
         "PaymentStatusEnum": "apps.payments.enums.PaymentStatus.choices",
         "WalletTxnKindEnum": "apps.payments.enums.WalletTxnKind.choices",
+        "NotificationTypeEnum": "apps.notifications.enums.NotificationType.choices",
     },
 }
 

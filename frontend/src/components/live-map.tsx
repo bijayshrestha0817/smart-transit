@@ -46,6 +46,13 @@ export interface LiveMapProps {
   zoom?: number;
   /** Wrapper classes; defaults to a 420px-tall rounded panel. */
   className?: string;
+  /**
+   * Fly the map to this point whenever `nonce` changes — e.g. when the user selects a
+   * bus from a list. Bumping `nonce` re-triggers the fly even if the coordinates repeat.
+   */
+  focus?: { lat: number; lng: number; nonce: number } | null;
+  /** Marker id to visually highlight (enlarged + ringed) as the current selection. */
+  selectedId?: string | number | null;
 }
 
 export const LiveMap = dynamic(() => import("./live-map-impl").then((m) => m.LiveMapImpl), {

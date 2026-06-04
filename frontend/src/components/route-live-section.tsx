@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Bus, Radio } from "lucide-react";
+import { AlertCircle, Bus, MapPin, Radio } from "lucide-react";
 
 import { LiveMap, type MapMarker, type MapStop } from "@/components/live-map";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import {
   type LocationEvent,
 } from "@/lib/realtime/messages";
 import { QUERY_KEYS } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 
 interface LivePos {
   lat: number;
@@ -47,6 +48,8 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
 
   // WS-driven positions, keyed by trip id. Seed comes inline from REST last_position.
   const [positions, setPositions] = useState<Record<number, LivePos>>({});
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [focus, setFocus] = useState<{ lat: number; lng: number; nonce: number } | null>(null);
 
   const handleLocation = useCallback((tripId: number, ev: LocationEvent) => {
     setPositions((prev) => ({
@@ -118,6 +121,18 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
     })
     .filter((m): m is MapMarker => m !== null);
 
+  // Tap a bus → highlight it + fly the map to its current position.
+  const focusBus = (at: ActiveTrip) => {
+    setSelectedId(at.trip.id);
+    const live = positions[at.trip.id];
+    const seed = at.last_position;
+    const lat = live ? live.lat : seed ? Number(seed.lat) : null;
+    const lng = live ? live.lng : seed ? Number(seed.lng) : null;
+    if (lat != null && lng != null) {
+      setFocus((f) => ({ lat, lng, nonce: (f?.nonce ?? 0) + 1 }));
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
@@ -152,7 +167,14 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
         ) : (
           <>
             <div className="overflow-hidden rounded-lg border">
-              <LiveMap markers={markers} stops={mapStops} polyline={polyline} className="h-[360px] w-full" />
+              <LiveMap
+                markers={markers}
+                stops={mapStops}
+                polyline={polyline}
+                focus={focus}
+                selectedId={selectedId}
+                className="h-[360px] w-full"
+              />
             </div>
             {active.length === 0 ? (
               <p className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
@@ -161,20 +183,47 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
               </p>
             ) : (
               <ul className="grid gap-1.5">
-                {active.map((at) => (
-                  <li
-                    key={at.trip.id}
-                    className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-sm"
-                  >
-                    <span className="flex items-center gap-2 font-medium">
-                      <span className="size-2 rounded-full bg-emerald-500" aria-hidden />
-                      Bus {at.trip.bus_plate}
-                    </span>
-                    <span className="label-mono text-[0.6rem] text-muted-foreground">
-                      {positions[at.trip.id] || at.last_position ? "tracking" : "waiting for fix"}
-                    </span>
-                  </li>
-                ))}
+                {active.map((at) => {
+                  const live = positions[at.trip.id];
+                  const seed = at.last_position;
+                  const lat = live ? live.lat : seed ? Number(seed.lat) : null;
+                  const lng = live ? live.lng : seed ? Number(seed.lng) : null;
+                  const located = lat != null && lng != null;
+                  const isSelected = selectedId === at.trip.id;
+                  return (
+                    <li key={at.trip.id}>
+                      <button
+                        type="button"
+                        onClick={() => focusBus(at)}
+                        aria-pressed={isSelected}
+                        title="Show on map"
+                        className={cn(
+                          "flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                          isSelected
+                            ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
+                            : "bg-muted/30 hover:bg-muted",
+                        )}
+                      >
+                        <span className="flex items-center gap-2 font-medium">
+                          <MapPin
+                            className={cn(
+                              "size-3.5 shrink-0",
+                              isSelected
+                                ? "text-primary"
+                                : located
+                                  ? "text-emerald-500"
+                                  : "text-muted-foreground",
+                            )}
+                          />
+                          Bus {at.trip.bus_plate}
+                        </span>
+                        <span className="label-mono shrink-0 text-[0.6rem] text-muted-foreground">
+                          {located ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "waiting for fix"}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </>

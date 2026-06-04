@@ -30,9 +30,35 @@ const NAV_BY_ROLE: Record<UserRole, { href: string; label: string }[]> = {
     { href: "/admin/routes", label: "Routes" },
     { href: "/admin/buses", label: "Buses" },
     { href: "/admin/drivers", label: "Drivers" },
+    { href: "/admin/trips", label: "Trips" },
     { href: "/admin/fleet", label: "Fleet" },
   ],
 };
+
+/** The role's nav links, shared by the desktop bar and the mobile strip. */
+function NavLinks({ role, pathname }: { role: UserRole; pathname: string }) {
+  return (
+    <>
+      {NAV_BY_ROLE[role].map((item) => {
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
+              active
+                ? "bg-muted font-medium text-foreground"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+            )}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
+    </>
+  );
+}
 
 /**
  * Client-side guard + chrome for the role dashboards.
@@ -80,24 +106,7 @@ export function DashboardShell({
               {ROLE_LABEL[role]}
             </span>
             <nav className="ml-1 hidden items-center gap-0.5 md:flex">
-              {NAV_BY_ROLE[role].map((item) => {
-                const active =
-                  pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "rounded-md px-3 py-1.5 text-sm transition-colors",
-                      active
-                        ? "bg-muted font-medium text-foreground"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                    )}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+              <NavLinks role={role} pathname={pathname} />
             </nav>
           </div>
           <div className="flex items-center gap-2">
@@ -108,6 +117,11 @@ export function DashboardShell({
             <LogoutButton />
           </div>
         </div>
+        {/* Mobile nav strip — the desktop bar's links are md+ only, so without this
+            the navbar would be invisible on narrow screens. */}
+        <nav className="flex items-center gap-0.5 overflow-x-auto border-t px-4 py-2 md:hidden">
+          <NavLinks role={role} pathname={pathname} />
+        </nav>
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-8 sm:px-8 sm:py-10">

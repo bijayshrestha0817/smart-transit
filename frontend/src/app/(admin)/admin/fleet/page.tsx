@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Bus, Radio } from "lucide-react";
+import { AlertCircle, Bus, MapPin, Radio } from "lucide-react";
 
 import { LiveMap, type MapMarker } from "@/components/live-map";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,8 @@ export default function AdminFleetPage() {
   });
 
   const [positions, setPositions] = useState<Record<number, LivePos>>({});
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [focus, setFocus] = useState<{ lat: number; lng: number; nonce: number } | null>(null);
 
   // One fleet socket carries every active trip's location events (keyed by trip_id).
   const handle = useCallback((data: unknown) => {
@@ -107,6 +109,18 @@ export default function AdminFleetPage() {
     })
     .filter((m): m is MapMarker => m !== null);
 
+  // Select a bus from the list → highlight it + fly the map to its current position.
+  const focusBus = (at: ActiveTrip) => {
+    setSelectedId(at.trip.id);
+    const live = positions[at.trip.id];
+    const seed = at.last_position;
+    const lat = live ? live.lat : seed ? Number(seed.lat) : null;
+    const lng = live ? live.lng : seed ? Number(seed.lng) : null;
+    if (lat != null && lng != null) {
+      setFocus((f) => ({ lat, lng, nonce: (f?.nonce ?? 0) + 1 }));
+    }
+  };
+
   const conn = CONN[wsStatus];
 
   return (
@@ -135,7 +149,12 @@ export default function AdminFleetPage() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
           <Card className="overflow-hidden p-0">
-            <LiveMap markers={markers} className="h-[480px] w-full" />
+            <LiveMap
+              markers={markers}
+              focus={focus}
+              selectedId={selectedId}
+              className="h-[480px] w-full"
+            />
           </Card>
 
           <Card>
@@ -157,20 +176,40 @@ export default function AdminFleetPage() {
                 <ul className="grid gap-1.5">
                   {active.map((at) => {
                     const live = positions[at.trip.id];
+                    const hasLoc = Boolean(live || at.last_position);
+                    const isSelected = selectedId === at.trip.id;
                     return (
-                      <li
-                        key={at.trip.id}
-                        className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{at.trip.bus_plate}</p>
-                          <p className="label-mono truncate text-[0.6rem] text-muted-foreground">
-                            {at.trip.route_name}
-                          </p>
-                        </div>
-                        <span className="label-mono shrink-0 text-[0.6rem] text-muted-foreground">
-                          {formatClock(live?.ts ?? at.last_position?.timestamp)}
-                        </span>
+                      <li key={at.trip.id}>
+                        <button
+                          type="button"
+                          onClick={() => focusBus(at)}
+                          aria-pressed={isSelected}
+                          title="Show on map"
+                          className={cn(
+                            "flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors",
+                            isSelected
+                              ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
+                              : "bg-muted/30 hover:bg-muted",
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+                              <MapPin
+                                className={cn(
+                                  "size-3.5 shrink-0",
+                                  isSelected ? "text-primary" : "text-muted-foreground",
+                                )}
+                              />
+                              {at.trip.bus_plate}
+                            </p>
+                            <p className="label-mono truncate pl-5 text-[0.6rem] text-muted-foreground">
+                              {at.trip.route_name}
+                            </p>
+                          </div>
+                          <span className="label-mono shrink-0 text-[0.6rem] text-muted-foreground">
+                            {hasLoc ? formatClock(live?.ts ?? at.last_position?.timestamp) : "no fix"}
+                          </span>
+                        </button>
                       </li>
                     );
                   })}

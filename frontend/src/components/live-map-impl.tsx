@@ -5,8 +5,11 @@
  *
  * Markers use `L.divIcon` (inline SVG) rather than Leaflet's default PNG icons — this
  * sidesteps the well-known broken-image-path problem under bundlers and lets us rotate
- * the bus marker by heading. The `FitView` child re-frames the map whenever the set of
- * plotted points changes.
+ * the bus marker by heading and enlarge the selected one.
+ *
+ * `FitView` frames the map to all points but keys on marker/stop IDENTITY (not their
+ * coordinates), so live position ticks don't constantly recenter the view — it only
+ * refits when buses enter/leave. `FlyToFocus` pans to a selected bus on demand.
  */
 
 import "leaflet/dist/leaflet.css";
@@ -19,17 +22,23 @@ import type { LiveMapProps } from "./live-map";
 
 /** Kathmandu — a sane default before any coordinate is known. */
 const DEFAULT_CENTER: [number, number] = [27.7172, 85.324];
+const FOCUS_ZOOM = 16;
 
-function busIcon(color = "#1e88e5", heading?: number | null): L.DivIcon {
+function busIcon(color = "#1e88e5", heading?: number | null, selected = false): L.DivIcon {
   const rotation = typeof heading === "number" && Number.isFinite(heading) ? heading : 0;
+  const size = selected ? 36 : 26;
+  const ring = selected
+    ? `<circle cx="12" cy="12" r="11" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.45"/>`
+    : "";
   return L.divIcon({
     className: "live-bus-marker",
-    html: `<div style="transform:rotate(${rotation}deg);width:26px;height:26px;display:flex;align-items:center;justify-content:center;">
-      <svg viewBox="0 0 24 24" width="26" height="26" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))">
+    html: `<div style="transform:rotate(${rotation}deg);width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;">
+      <svg viewBox="0 0 24 24" width="${size}" height="${size}" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">
+        ${ring}
         <path d="M12 2 L20 21 L12 16 L4 21 Z" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
       </svg></div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
 }
 
@@ -42,10 +51,13 @@ function stopIcon(): L.DivIcon {
   });
 }
 
-/** Re-frame the map to fit all plotted points whenever they change. */
-function FitView({ points }: { points: [number, number][] }) {
+/**
+ * Frame the map to all plotted points, but only when the SET of points changes
+ * (keyed on `fitKey` = marker/stop ids) — not on every coordinate tick, which would
+ * fight live updates and any user-initiated fly-to.
+ */
+function FitView({ points, fitKey }: { points: [number, number][]; fitKey: string }) {
   const map = useMap();
-  const key = points.map((p) => p.join(",")).join("|");
   useEffect(() => {
     if (points.length === 0) return;
     if (points.length === 1) {
@@ -53,9 +65,22 @@ function FitView({ points }: { points: [number, number][] }) {
       return;
     }
     map.fitBounds(points as L.LatLngBoundsExpression, { padding: [40, 40], maxZoom: 16 });
-    // `key` captures the point set; `points` identity changes every render.
+    // Refit only when the point SET changes; `points` identity changes every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, key]);
+  }, [map, fitKey]);
+  return null;
+}
+
+/** Pan/zoom to a selected point whenever its `nonce` changes. */
+function FlyToFocus({ focus }: { focus: LiveMapProps["focus"] }) {
+  const map = useMap();
+  const nonce = focus?.nonce;
+  useEffect(() => {
+    if (!focus) return;
+    map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), FOCUS_ZOOM), { duration: 0.6 });
+    // Re-fly whenever the caller bumps `nonce` (even if coordinates repeat).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, nonce]);
   return null;
 }
 
@@ -66,12 +91,20 @@ export function LiveMapImpl({
   center,
   zoom = 13,
   className,
+  focus,
+  selectedId,
 }: LiveMapProps) {
   const points = useMemo<[number, number][]>(
     () => [
       ...markers.map((m) => [m.lat, m.lng] as [number, number]),
       ...stops.map((s) => [s.lat, s.lng] as [number, number]),
     ],
+    [markers, stops],
+  );
+
+  // Identity of the plotted set — drives FitView without reacting to position ticks.
+  const fitKey = useMemo(
+    () => [...markers.map((m) => `m${m.id}`), ...stops.map((s) => `s${s.id}`)].sort().join("|"),
     [markers, stops],
   );
 
@@ -100,12 +133,18 @@ export function LiveMapImpl({
       ))}
 
       {markers.map((m) => (
-        <Marker key={`bus-${m.id}`} position={[m.lat, m.lng]} icon={busIcon(m.color, m.heading)}>
+        <Marker
+          key={`bus-${m.id}`}
+          position={[m.lat, m.lng]}
+          icon={busIcon(m.color, m.heading, m.id === selectedId)}
+          zIndexOffset={m.id === selectedId ? 1000 : 0}
+        >
           {m.label ? <Popup>{m.label}</Popup> : null}
         </Marker>
       ))}
 
-      <FitView points={points} />
+      <FitView points={points} fitKey={fitKey} />
+      <FlyToFocus focus={focus} />
     </MapContainer>
   );
 }
