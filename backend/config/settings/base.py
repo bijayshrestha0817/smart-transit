@@ -54,6 +54,10 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.buses",
     "apps.trips",
+    "apps.payments",
+    "apps.notifications",
+    "apps.driver_logs",
+    "apps.maintenance",
 ]
 
 MIDDLEWARE = [
@@ -198,6 +202,12 @@ SPECTACULAR_SETTINGS = {
     "ENUM_NAME_OVERRIDES": {
         "BusStatusEnum": "apps.buses.enums.BusStatus.choices",
         "TripStatusEnum": "apps.trips.enums.TripStatus.choices",
+        "TicketStatusEnum": "apps.payments.enums.TicketStatus.choices",
+        "PaymentGatewayEnum": "apps.payments.enums.PaymentGateway.choices",
+        "PaymentStatusEnum": "apps.payments.enums.PaymentStatus.choices",
+        "WalletTxnKindEnum": "apps.payments.enums.WalletTxnKind.choices",
+        "NotificationTypeEnum": "apps.notifications.enums.NotificationType.choices",
+        "DriverLogEventTypeEnum": "apps.driver_logs.enums.DriverLogEventType.choices",
     },
 }
 

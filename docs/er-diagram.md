@@ -1,6 +1,7 @@
 # Data Model & ER Diagram — Smart Transit AI
 
-> PostgreSQL schema for all 12 core tables. Every table inherits the base fields
+> PostgreSQL schema for the 12 core tables plus the wallet ledger (`wallets`,
+> `wallet_transactions`, added with P4). Every table inherits the base fields
 > `created_at`, `updated_at`, `is_deleted` (soft delete). Conventions and indexing
 > strategy follow the diagram. Target ORM: **Django 6** models.
 
@@ -29,6 +30,7 @@ erDiagram
     USERS ||--o{ BUSES            : "drives (assigned_driver)"
     USERS ||--o{ TRIPS            : "drives"
     USERS ||--o{ TICKETS          : "buys (passenger)"
+    USERS ||--|| WALLETS          : "has (store credit)"
     USERS ||--o{ NOTIFICATIONS    : "receives"
     USERS ||--o{ DRIVER_LOGS      : "authors"
 
@@ -43,6 +45,9 @@ erDiagram
     TRIPS  ||--o{ DRIVER_LOGS     : "logged during"
 
     TICKETS ||--|| PAYMENTS       : "paid by"
+
+    WALLETS ||--o{ WALLET_TRANSACTIONS : "ledger of"
+    PAYMENTS ||--o{ WALLET_TRANSACTIONS : "settles/refunds via"
 
     USERS {
         bigint   id PK
@@ -69,6 +74,7 @@ erDiagram
         jsonb    polyline_json
         int      estimated_duration "minutes"
         string   color "hex, for map polyline"
+        decimal  fare "DECIMAL(8,2), >= 0.01 (P4 ticket price)"
     }
     BUS_STOPS {
         bigint   id PK
@@ -112,6 +118,20 @@ erDiagram
         string   gateway "enum: khalti|esewa|stripe|wallet"
         string   status "enum: pending|success|failed|refunded"
         string   txn_ref UK
+    }
+    WALLETS {
+        bigint   id PK
+        bigint   user_id FK UK "→ users.id (one per user)"
+        decimal  balance "DECIMAL(12,2), default 0, source of truth"
+    }
+    WALLET_TRANSACTIONS {
+        bigint   id PK
+        bigint   wallet_id FK
+        string   kind "enum: credit|debit"
+        decimal  amount "DECIMAL(12,2), positive magnitude"
+        decimal  balance_after "snapshot after applying"
+        bigint   payment_id FK "→ payments.id, nullable (SET_NULL)"
+        string   reference "e.g. ticket:123 | refund:123"
     }
     NOTIFICATIONS {
         bigint   id PK
@@ -168,6 +188,8 @@ confirmation.
 ### `routes`
 `polyline_json` stores the encoded/decoded path for map rendering; `color` drives the
 per-route polyline. `estimated_duration` is the static baseline the AI ETA refines.
+`fare` (P4) is the server-authoritative ticket price (`DECIMAL(8,2)`, `>= 0.01`); a ticket
+snapshots it at issue time so later price changes don't alter past sales.
 
 ### `bus_stops`
 Ordered by `sequence` along a route. `(lat,lng)` feed both the map markers and the
@@ -191,7 +213,17 @@ lifecycle covers issuance through refund. One ticket ↔ one payment.
 ### `payments`
 One-to-one with `tickets` (`ticket_id` unique). `gateway` includes `wallet` for in-app
 balance spends. `txn_ref` is the gateway's reference, unique for idempotent webhook
-handling.
+handling (partial-unique `WHERE is_deleted=false`). `amount` is `DECIMAL(8,2)` (= ticket fare).
+
+### `wallets` (P4)
+One row per user (`user_id` unique), `balance DECIMAL(12,2)` is the store-credit source of
+truth — mutated only under `SELECT … FOR UPDATE` so concurrent debits/credits serialize.
+Funded by **refunds** (store credit); external top-up is future/D4 (no top-up endpoint yet).
+
+### `wallet_transactions` (P4)
+Append-only ledger. Each row is a `credit`/`debit` of a positive `amount` with a
+`balance_after` snapshot, an optional `payment_id` link, and a `reference` (`ticket:<id>` /
+`refund:<id>`). Written in the same transaction as the balance change.
 
 ### `notifications`
 In-app feed + FCM/email fan-out source. `payload_json` carries type-specific data
@@ -223,6 +255,7 @@ Driven by the read patterns in [`api-contract.md`](api-contract.md) and the
 | `(passenger_id)` | `tickets` | "my tickets" list |
 | `(trip_id)` | `tickets` | passenger count / load per trip |
 | `(gateway, status)` | `payments` | reconciliation + revenue analytics |
+| `(wallet_id, -created_at)` | `wallet_transactions` | wallet ledger (cursor) |
 | `(status, route_id)` | `trips` | active-trips-per-route, fleet map |
 | `(route_id, sequence)` | `bus_stops` | ordered stops for a route |
 | `(user_id, read_at)` | `notifications` | unread feed per user |

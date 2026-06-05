@@ -4,6 +4,8 @@ Role auth uses ``client.force_authenticate(user=...)`` (DRF supports it even wit
 the cookie-JWT default). Body assertions read the rendered envelope.
 """
 
+from decimal import Decimal
+
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -152,6 +154,54 @@ def test_assign_stops_replaces_route_stops(client, admin, route):
     assert [s.name for s in active] == ["Koteshwor", "Tinkune"]
     # The old stop is now a tombstone, not active.
     assert not route.stops.filter(name="Old").exists()
+
+
+# ── Route fare ───────────────────────────────────────────────────────────────
+@pytest.mark.django_db
+def test_admin_can_set_and_patch_route_fare(client, admin):
+    client.force_authenticate(user=admin)
+    resp = client.post(
+        ROUTES_URL,
+        {"name": "Fare Line", "color": "#1E88E5", "estimated_duration": 40, "fare": "30.00"},
+        format="json",
+    )
+    assert resp.status_code == 201
+    route_id = resp.json()["data"]["id"]
+    assert resp.json()["data"]["fare"] == "30.00"
+
+    patch = client.patch(f"{ROUTES_URL}{route_id}/", {"fare": "45.50"}, format="json")
+    assert patch.status_code == 200
+    assert patch.json()["data"]["fare"] == "45.50"
+    assert Route.objects.get(id=route_id).fare == Decimal("45.50")
+
+
+@pytest.mark.django_db
+def test_admin_create_rejects_fare_below_minimum(client, admin):
+    client.force_authenticate(user=admin)
+    resp = client.post(
+        ROUTES_URL,
+        {"name": "Free Line", "color": "#1E88E5", "estimated_duration": 40, "fare": "0.00"},
+        format="json",
+    )
+    assert resp.status_code == 400
+    # Pin the cause to the fare floor itself, not just "some 400" — the model's
+    # MinValueValidator(0.01) auto-maps to the stable ``min_value`` code on ``fare``.
+    error = resp.json()["errors"][0]
+    assert error["field"] == "fare"
+    assert error["code"] == "min_value"
+
+
+@pytest.mark.django_db
+def test_admin_accepts_fare_at_minimum_boundary(client, admin):
+    client.force_authenticate(user=admin)
+    # 0.01 is the exact floor — it must be accepted, documenting the boundary.
+    resp = client.post(
+        ROUTES_URL,
+        {"name": "Penny Line", "color": "#1E88E5", "estimated_duration": 40, "fare": "0.01"},
+        format="json",
+    )
+    assert resp.status_code == 201
+    assert resp.json()["data"]["fare"] == "0.01"
 
 
 # ── Driver management ────────────────────────────────────────────────────────

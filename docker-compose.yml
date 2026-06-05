@@ -4,7 +4,7 @@
 #
 # Brings up PostgreSQL + Redis, runs migrations once, then starts the four
 # backend processes (HTTP/DRF, WebSocket/ASGI, Celery worker, Celery beat).
-# The frontend service joins here in P0-0c; prod hardening (Nginx, gunicorn,
+# Backend only — the frontend runs separately. Prod hardening (Nginx, gunicorn,
 # TLS, prod settings) lands in P7 via infra/ + docker-compose.prod.yml.
 
 # Shared environment for every backend service. Dev defaults only — non-secret.
@@ -77,21 +77,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-
-  # Next.js dev server. Talks to the backend via the host-published port
-  # (NEXT_PUBLIC_API_URL is browser-exposed, so it must resolve from the browser,
-  # not the compose network). Prod build/serve lands in P7.
-  frontend:
-    build:
-      context: ./frontend
-    command: npm run dev -- --hostname 0.0.0.0 --port 3000
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
-    ports:
-      - "3000:3000"
-    depends_on:
-      web:
-        condition: service_started
 
   # WebSocket / ASGI (Channels). P2 registers the consumers.
   ws:

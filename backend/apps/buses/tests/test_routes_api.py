@@ -22,9 +22,15 @@ def client() -> APIClient:
 @pytest.fixture
 def routes(db) -> list[Route]:
     ring = Route.objects.create(
-        name="Ring Road", color="#1E88E5", estimated_duration=55, polyline_json=[[27.7, 85.3]]
+        name="Ring Road",
+        color="#1E88E5",
+        estimated_duration=55,
+        fare=Decimal("35.00"),
+        polyline_json=[[27.7, 85.3]],
     )
-    lagan = Route.objects.create(name="Lagankhel–Ratnapark", color="#E53935", estimated_duration=35)
+    lagan = Route.objects.create(
+        name="Lagankhel–Ratnapark", color="#E53935", estimated_duration=35, fare=Decimal("20.00")
+    )
     # Stops created out of order to prove the API returns them by sequence.
     BusStop.objects.create(
         name="Kalanki", lat=Decimal("27.6936"), lng=Decimal("85.2811"), route=ring, sequence=3
@@ -59,11 +65,23 @@ def test_route_list_search_filters(client, routes):
 
 
 @pytest.mark.django_db
+def test_route_list_serializes_fare_as_decimal_string(client, routes):
+    resp = client.get(ROUTES_URL)
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    # Find by name — never assume list ordering.
+    ring_row = next(row for row in data if row["name"] == "Ring Road")
+    # Guards COERCE_DECIMAL_TO_STRING: the fare crosses the wire as a STRING, not a float.
+    assert ring_row["fare"] == "35.00"
+
+
+@pytest.mark.django_db
 def test_route_detail_returns_ordered_stops_and_polyline(client, routes):
     ring = routes[0]
     resp = client.get(f"{ROUTES_URL}{ring.id}/")
     assert resp.status_code == 200
     data = resp.json()["data"]
+    assert data["fare"] == "35.00"
     assert data["polyline_json"] == [[27.7, 85.3]]
     sequences = [s["sequence"] for s in data["stops"]]
     assert sequences == [1, 2, 3]  # ordered by sequence

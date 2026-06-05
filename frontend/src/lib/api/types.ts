@@ -71,6 +71,8 @@ export interface Route {
   color: string;
   /** Estimated traversal time in minutes. */
   estimated_duration: number;
+  /** Decimal string, e.g. "35.00". */
+  fare: string;
   created_at: string;
 }
 
@@ -116,5 +118,131 @@ export interface Driver {
   full_name: string;
   phone: string;
   is_verified: boolean;
+  created_at: string;
+}
+
+/** Trip lifecycle states (`TripStatus` enum). */
+export type TripStatus = "scheduled" | "in_progress" | "completed" | "cancelled";
+
+/** A scheduled/active trip as returned by the trip endpoints (`TripSerializer`). */
+export interface Trip {
+  id: number;
+  /** FK id of the bus. */
+  bus: number;
+  bus_plate: string;
+  /** FK id of the route. */
+  route: number;
+  route_name: string;
+  /** FK id of the driver. */
+  driver: number;
+  driver_email: string;
+  status: TripStatus;
+  /** ISO-8601, or null before the trip starts. */
+  start_time: string | null;
+  /** ISO-8601, or null until the trip ends. */
+  end_time: string | null;
+  /** Driver-reported headcount, or null if never set. */
+  passenger_count: number | null;
+  created_at: string;
+}
+
+/**
+ * The latest GPS breadcrumb for a trip. lat/lng/speed/heading are decimal STRINGS on
+ * the wire (DRF `DecimalField`) — `parseFloat` before any map math. `heading` may be null.
+ */
+export interface LastPosition {
+  lat: string;
+  lng: string;
+  speed: string;
+  heading: string | null;
+  /** ISO-8601 with microseconds + offset. */
+  timestamp: string;
+}
+
+/** Trip + its last known position (`/trips/active/` and `/admin/fleet/`; not paginated). */
+export interface ActiveTrip {
+  trip: Trip;
+  last_position: LastPosition | null;
+}
+
+// ── Ticketing / payments (P4) ─────────────────────────────────────────────────
+
+/** Ticket lifecycle (`TicketStatus`). */
+export type TicketStatus =
+  | "issued"
+  | "active"
+  | "used"
+  | "expired"
+  | "refunded"
+  | "cancelled";
+
+/** Payment gateways (`PaymentGateway`). Only `wallet` settles end-to-end this slice. */
+export type PaymentGateway = "khalti" | "esewa" | "stripe" | "wallet";
+
+/** Payment lifecycle (`PaymentStatus`). */
+export type PaymentStatus = "pending" | "success" | "failed" | "refunded";
+
+/** Wallet ledger entry kind (`WalletTxnKind`). */
+export type WalletTxnKind = "credit" | "debit";
+
+/** A purchased ride ticket (`TicketSerializer`). `fare` is a decimal STRING. */
+export interface Ticket {
+  id: number;
+  passenger: number;
+  trip: number;
+  route_name: string;
+  /** Signed QR token to render as a QR code. */
+  qr_code: string;
+  status: TicketStatus;
+  /** Decimal string, e.g. "25.00". */
+  fare: string;
+  payment_status: PaymentStatus;
+  gateway: PaymentGateway;
+  created_at: string;
+}
+
+/** An append-only wallet ledger row (`WalletTransactionSerializer`). Amounts are decimal STRINGS. */
+export interface WalletTransaction {
+  id: number;
+  kind: WalletTxnKind;
+  /** Positive magnitude, decimal string. */
+  amount: string;
+  /** Balance snapshot after this row, decimal string. */
+  balance_after: string;
+  /** Free-form origin, e.g. "ticket:123" or "refund:123". */
+  reference: string;
+  /** Linked payment id, or null. */
+  payment: number | null;
+  created_at: string;
+}
+
+/** The checkout descriptor returned by `POST /payments/checkout/`. */
+export interface CheckoutResult {
+  txn_ref: string;
+  gateway: PaymentGateway;
+  status: PaymentStatus;
+  checkout_ref: string | null;
+}
+
+// ── Notifications (P5) ────────────────────────────────────────────────────────
+
+/** Notification kinds (`NotificationType`). */
+export type NotificationType =
+  | "bus_arriving"
+  | "route_delay"
+  | "emergency"
+  | "maintenance_due"
+  | "trip_completed";
+
+/**
+ * An in-app notification (`NotificationSerializer`). Named `AppNotification` to avoid
+ * clashing with the DOM `Notification` global. `read_at` is null while unread;
+ * `payload_json` is free-form, type-specific data (e.g. `{ trip_id, route_name }`).
+ */
+export interface AppNotification {
+  id: number;
+  type: NotificationType;
+  payload_json: Record<string, unknown>;
+  read_at: string | null;
   created_at: string;
 }

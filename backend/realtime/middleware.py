@@ -1,16 +1,3 @@
-"""WebSocket JWT authentication middleware.
-
-The HTTP path authenticates via ``apps.accounts.authentication.CookieJWTAuthentication``;
-this is its WebSocket counterpart. Browsers can't set an ``Authorization`` header on a
-WebSocket handshake, so the access token arrives either in the ``st_access`` cookie
-(``settings.JWT_AUTH_COOKIE``) or as a ``?token=`` query-string parameter. We validate it
-with SimpleJWT and resolve the user from the ``user_id`` claim, mirroring the REST class.
-
-This middleware NEVER raises: a missing/invalid/expired token resolves to
-``AnonymousUser`` and the consumer decides how to close (``close(4401)``). Raising here
-would surface as an opaque 500 during the handshake instead of a clean WS close code.
-"""
-
 from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async

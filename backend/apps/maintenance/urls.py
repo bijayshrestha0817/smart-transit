@@ -1,0 +1,11 @@
+"""Maintenance app URL entry point — dispatches to versioned sub-APIs.
+
+Mounted by config at /api/, so v1 endpoints resolve under /api/v1/.
+"""
+
+from django.urls import include, path
+
+urlpatterns = [
+    path("v1/", include("apps.maintenance.v1.urls")),
+    # path("v2/", include("apps.maintenance.v2.urls")),  # add when v2 lands
+]

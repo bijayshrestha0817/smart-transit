@@ -18,3 +18,8 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 JWT_AUTH_COOKIE_SECURE = False
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+# Run Celery tasks inline (synchronously) so async delivery is exercised + asserted
+# in tests without a broker/worker, and surface task exceptions to the caller.
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
