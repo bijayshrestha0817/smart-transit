@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getRoute } from "@/lib/api/routes";
 import { ApiError, toApiError } from "@/lib/api/error";
 import type { BusStop, RouteDetail } from "@/lib/api/types";
+import { formatMoney } from "@/lib/format";
 import { QUERY_KEYS } from "@/lib/queryClient";
 
 export default function RouteDetailPage() {
@@ -59,7 +60,7 @@ function RouteContent({ route }: { route: RouteDetail }) {
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           ~{route.estimated_duration} min end to end · {route.stops.length}{" "}
-          {route.stops.length === 1 ? "stop" : "stops"}
+          {route.stops.length === 1 ? "stop" : "stops"} · {formatMoney(route.fare)} per ride
         </p>
       </header>
 

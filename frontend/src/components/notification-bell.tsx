@@ -11,6 +11,7 @@
  */
 
 import { useCallback } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, BellRing, CheckCheck } from "lucide-react";
 
@@ -23,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { useMe } from "@/hooks/use-auth";
 import { useSocket } from "@/hooks/use-socket";
 import { toApiError } from "@/lib/api/error";
 import {
@@ -30,54 +32,14 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/api/notifications";
-import type { AppNotification, NotificationType } from "@/lib/api/types";
+import { DASHBOARD_BY_ROLE } from "@/lib/auth-routes";
+import { describe, LABEL, relativeTime } from "@/lib/notifications-format";
 import { QUERY_KEYS } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
-const LABEL: Record<NotificationType, string> = {
-  bus_arriving: "Bus arriving",
-  route_delay: "Route delay",
-  emergency: "Emergency",
-  maintenance_due: "Maintenance due",
-  trip_completed: "Trip completed",
-};
-
-/** Build a human line from the type + free-form payload. */
-function describe(n: AppNotification): string {
-  const p = n.payload_json ?? {};
-  const route = typeof p.route_name === "string" ? p.route_name : null;
-  switch (n.type) {
-    case "trip_completed":
-      return route ? `Trip completed on ${route}.` : "A trip you follow has completed.";
-    case "bus_arriving":
-      return route ? `Your bus is arriving on ${route}.` : "Your bus is arriving.";
-    case "route_delay":
-      return route ? `Delay reported on ${route}.` : "A delay was reported on your route.";
-    case "maintenance_due":
-      return typeof p.plate === "string"
-        ? `Maintenance due for ${p.plate}.`
-        : "A bus needs maintenance.";
-    case "emergency":
-      return typeof p.message === "string" ? p.message : "Emergency alert.";
-    default:
-      return LABEL[n.type] ?? "Notification";
-  }
-}
-
-function relativeTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "";
-  const s = Math.floor((Date.now() - t) / 1000);
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
 export function NotificationBell() {
   const queryClient = useQueryClient();
+  const { user } = useMe();
 
   // Recent feed (read + unread) for display…
   const feedQuery = useQuery({
@@ -196,6 +158,16 @@ export function NotificationBell() {
             >
               <CheckCheck className="size-3.5" />
               Mark all read
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {/* Guard on `user`: without it the href would be `/undefined/notifications`. */}
+        {user && (
+          <>
+            <DropdownMenuSeparator className="my-0" />
+            <DropdownMenuItem asChild className="justify-center text-xs">
+              <Link href={`${DASHBOARD_BY_ROLE[user.role]}/notifications`}>See all</Link>
             </DropdownMenuItem>
           </>
         )}

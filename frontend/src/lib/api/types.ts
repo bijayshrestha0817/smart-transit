@@ -71,6 +71,8 @@ export interface Route {
   color: string;
   /** Estimated traversal time in minutes. */
   estimated_duration: number;
+  /** Decimal string, e.g. "35.00". */
+  fare: string;
   created_at: string;
 }
 

@@ -10,7 +10,7 @@ from .BusStopSerializer import BusStopSerializer
 class RouteListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Route
-        fields = ("id", "name", "color", "estimated_duration", "created_at")
+        fields = ("id", "name", "color", "estimated_duration", "fare", "created_at")
         read_only_fields = fields
 
 
@@ -24,6 +24,7 @@ class RouteDetailSerializer(serializers.ModelSerializer):
             "name",
             "color",
             "estimated_duration",
+            "fare",
             "polyline_json",
             "created_at",
             "stops",
@@ -40,4 +41,4 @@ class RouteDetailSerializer(serializers.ModelSerializer):
 class RouteWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Route
-        fields = ("name", "color", "estimated_duration", "polyline_json")
+        fields = ("name", "color", "estimated_duration", "fare", "polyline_json")

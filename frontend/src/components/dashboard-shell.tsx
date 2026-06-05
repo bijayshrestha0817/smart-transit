@@ -28,7 +28,10 @@ const NAV_BY_ROLE: Record<UserRole, { href: string; label: string }[]> = {
     { href: "/passenger/tickets", label: "Tickets" },
     { href: "/passenger/wallet", label: "Wallet" },
   ],
-  driver: [{ href: "/driver", label: "Trips" }],
+  driver: [
+    { href: "/driver", label: "Trips" },
+    { href: "/driver/notifications", label: "Notifications" },
+  ],
   admin: [
     { href: "/admin/routes", label: "Routes" },
     { href: "/admin/buses", label: "Buses" },

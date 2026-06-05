@@ -91,6 +91,7 @@ export function BuyTicketButton() {
   });
 
   const routes = routesQuery.data?.rows ?? [];
+  const selectedRoute = routes.find((r) => String(r.id) === routeId);
   const trips = (tripsQuery.data ?? []).map((a) => a.trip);
   const balance = Number(walletQuery.data?.balance ?? "0");
   // Fares are always > 0 (backend-enforced), so a 0 wallet balance can never cover one.
@@ -135,6 +136,15 @@ export function BuyTicketButton() {
                   ))}
                 </SelectContent>
               </Select>
+              {selectedRoute && (
+                <p className="text-xs text-muted-foreground">
+                  Fare:{" "}
+                  <span className="font-medium text-foreground">
+                    {formatMoney(selectedRoute.fare)}
+                  </span>{" "}
+                  per ride
+                </p>
+              )}
             </div>
 
             <div className="grid gap-1.5">
