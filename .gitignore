@@ -8,6 +8,10 @@ venv/
 staticfiles/
 mediafiles/
 
+# Celery beat writes its schedule DB into CWD (= the bind-mounted /app) in the dev stack.
+celerybeat-schedule*
+celerybeat.pid
+
 # ── Node / Next.js ───────────────────────────────────────────
 node_modules/
 .next/

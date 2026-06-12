@@ -20,6 +20,13 @@ x-backend-env: &backend-env
   CSRF_TRUSTED_ORIGINS: http://localhost:3000
   JWT_COOKIE_SECURE: "false"
 
+# Bind-mount the source into every backend service so code changes take effect without an
+# image rebuild — `web` (runserver) hot-reloads; `ws`/`worker`/`beat` need a `restart`.
+# Deps live in the image's site-packages (installed before `COPY . .`), so this overlays
+# only /app source. Without it, adding/changing an app requires `up -d --build`.
+x-backend-volumes: &backend-volumes
+  - ./backend:/app
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -55,6 +62,7 @@ services:
     image: smart-transit-backend:dev
     command: python manage.py migrate --noinput
     environment: *backend-env
+    volumes: *backend-volumes
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,6 +74,7 @@ services:
     image: smart-transit-backend:dev
     command: python manage.py runserver 0.0.0.0:8000
     environment: *backend-env
+    volumes: *backend-volumes
     ports:
       - "8000:8000"
     depends_on:
@@ -83,6 +92,7 @@ services:
     image: smart-transit-backend:dev
     command: daphne -b 0.0.0.0 -p 9000 config.asgi:application
     environment: *backend-env
+    volumes: *backend-volumes
     ports:
       - "9000:9000"
     depends_on:
@@ -93,6 +103,7 @@ services:
     image: smart-transit-backend:dev
     command: celery -A config worker --loglevel info
     environment: *backend-env
+    volumes: *backend-volumes
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -101,6 +112,7 @@ services:
     image: smart-transit-backend:dev
     command: celery -A config beat --loglevel info
     environment: *backend-env
+    volumes: *backend-volumes
     depends_on:
       migrate:
         condition: service_completed_successfully
