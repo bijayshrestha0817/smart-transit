@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Bus, Map, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { AdminKpis } from "@/components/admin-kpis";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMe } from "@/hooks/use-auth";
 
@@ -19,11 +20,15 @@ export default function AdminDashboard() {
           {firstName ? `Welcome, ${firstName}.` : "Welcome."}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Manage the network — routes and their stops, the fleet, and drivers.
+          A live read on the network — today&apos;s ridership, revenue, and fleet — plus quick
+          access to manage routes, the fleet, and drivers.
         </p>
       </section>
 
+      <AdminKpis />
+
       <section className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+        <p className="label-mono col-span-full text-xs text-muted-foreground">Manage</p>
         <ManageCard
           href="/admin/routes"
           icon={Map}

@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.buses.models import Bus, Route
+from apps.buses.models import Bus, BusStop, Route
 from apps.trips.enums import TripStatus
 from apps.trips.models import GpsLocation, Trip
 
@@ -23,6 +23,10 @@ ADMIN_TRIPS_URL = "/api/v1/admin/trips/"
 DRIVER_TRIPS_URL = "/api/v1/driver/trips/"
 ACTIVE_URL = "/api/v1/trips/active/"
 FLEET_URL = "/api/v1/admin/fleet/"
+
+
+def eta_url(trip_id) -> str:
+    return f"/api/v1/trips/{trip_id}/eta/"
 
 
 @pytest.fixture
@@ -357,3 +361,86 @@ def test_admin_fleet_snapshot(client, admin, route, bus, driver):
 def test_admin_fleet_forbidden_for_passenger(client, passenger):
     client.force_authenticate(user=passenger)
     assert client.get(FLEET_URL).status_code == 403
+
+
+# ── Baseline ETA ─────────────────────────────────────────────────────────────
+@pytest.mark.django_db
+def test_active_trips_payload_includes_eta(client, passenger, route, bus, driver):
+    base = timezone.now()
+    trip = Trip.objects.create(
+        bus=bus, route=route, driver=driver, status=TripStatus.IN_PROGRESS, start_time=base
+    )
+    GpsLocation.objects.create(
+        trip=trip,
+        lat=Decimal("27.700000"),
+        lng=Decimal("85.300000"),
+        speed=Decimal("20.00"),
+        timestamp=base,
+    )
+    client.force_authenticate(user=passenger)
+    resp = client.get(ACTIVE_URL, {"route": route.id})
+    assert resp.status_code == 200
+    eta = resp.json()["data"][0]["eta"]
+    # No GPS-anchored stops here, but a running trip with a baseline duration → schedule.
+    assert eta["source"] in {"gps", "schedule", "unavailable"}
+    assert eta["source"] == "schedule"
+
+
+@pytest.mark.django_db
+def test_trip_eta_endpoint_gps_estimate(client, passenger, route, bus, driver):
+    base = timezone.now()
+    BusStop.objects.create(
+        route=route,
+        name="Koteshwor",
+        lat=Decimal("27.700000"),
+        lng=Decimal("85.300000"),
+        sequence=1,
+    )
+    BusStop.objects.create(
+        route=route, name="Tinkune", lat=Decimal("27.720000"), lng=Decimal("85.320000"), sequence=2
+    )
+    trip = Trip.objects.create(
+        bus=bus, route=route, driver=driver, status=TripStatus.IN_PROGRESS, start_time=base
+    )
+    GpsLocation.objects.create(
+        trip=trip,
+        lat=Decimal("27.701000"),
+        lng=Decimal("85.301000"),
+        speed=Decimal("30.00"),
+        timestamp=base,
+    )
+    client.force_authenticate(user=passenger)
+    resp = client.get(eta_url(trip.id))
+    assert resp.status_code == 200
+    eta = resp.json()["data"]
+    assert eta["source"] == "gps"
+    assert eta["next_stop"] == "Tinkune"
+    assert eta["minutes"] is not None
+
+
+@pytest.mark.django_db
+def test_trip_eta_unavailable_for_scheduled_trip(client, passenger, trip):
+    # The trip exists but hasn't started (no start_time, not in progress) → 200 unavailable,
+    # NOT a 404. The trip is real; the estimate just isn't.
+    client.force_authenticate(user=passenger)
+    resp = client.get(eta_url(trip.id))
+    assert resp.status_code == 200
+    assert resp.json()["data"]["source"] == "unavailable"
+
+
+@pytest.mark.django_db
+def test_trip_eta_404_for_unknown_trip(client, passenger):
+    client.force_authenticate(user=passenger)
+    resp = client.get(eta_url(999999))
+    assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+def test_trip_eta_forbidden_for_driver(client, driver, trip):
+    client.force_authenticate(user=driver)
+    assert client.get(eta_url(trip.id)).status_code == 403
+
+
+@pytest.mark.django_db
+def test_trip_eta_requires_auth(client, trip):
+    assert client.get(eta_url(trip.id)).status_code == 401

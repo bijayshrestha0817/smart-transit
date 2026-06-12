@@ -133,6 +133,8 @@ export interface Trip {
   /** FK id of the route. */
   route: number;
   route_name: string;
+  /** Route display color (hex), e.g. `#1E88E5` — used to tint the live map marker. */
+  route_color: string;
   /** FK id of the driver. */
   driver: number;
   driver_email: string;
@@ -159,10 +161,22 @@ export interface LastPosition {
   timestamp: string;
 }
 
-/** Trip + its last known position (`/trips/active/` and `/admin/fleet/`; not paginated). */
+/**
+ * Baseline heuristic ETA to the next stop (`EtaService`). `source` signals confidence:
+ * `gps` (live position), `schedule` (timetable fallback), or `unavailable` (no estimate).
+ */
+export interface Eta {
+  minutes: number | null;
+  seconds: number | null;
+  next_stop: string | null;
+  source: "gps" | "schedule" | "unavailable";
+}
+
+/** Trip + its last known position + baseline ETA (`/trips/active/` and `/admin/fleet/`; not paginated). */
 export interface ActiveTrip {
   trip: Trip;
   last_position: LastPosition | null;
+  eta: Eta | null;
 }
 
 // ── Ticketing / payments (P4) ─────────────────────────────────────────────────
@@ -245,4 +259,47 @@ export interface AppNotification {
   payload_json: Record<string, unknown>;
   read_at: string | null;
   created_at: string;
+}
+
+// ── Admin analytics (P6) ──────────────────────────────────────────────────────
+
+/**
+ * Admin operations KPIs (`KpiSerializer`, `GET /admin/overview/kpis/`).
+ *
+ * All counts are integers. `revenue` is a decimal money STRING (e.g. "35.00") — keep
+ * it a string and only `parseFloat` for display via `formatMoney`. `avg_delay` is
+ * minutes (1dp) over today's completed trips, or `null` when there are none.
+ *
+ * `active_buses` = distinct buses on an in-progress trip (live ops), distinct from
+ * `buses_active` = `Bus.status === "active"` fleet composition. The `*_today` trip
+ * counts are scoped to the admin's local day; the bare trip counts are lifetime.
+ */
+export interface AdminKpis {
+  // Fleet
+  active_buses: number;
+  total_buses: number;
+  buses_active: number;
+  buses_idle: number;
+  buses_in_maintenance: number;
+  buses_retired: number;
+  // Trips — lifetime
+  scheduled_trips: number;
+  active_trips: number;
+  completed_trips: number;
+  cancelled_trips: number;
+  // Trips — today
+  scheduled_trips_today: number;
+  active_trips_today: number;
+  completed_trips_today: number;
+  cancelled_trips_today: number;
+  // Ridership / money / operations (today)
+  passengers_today: number;
+  revenue: string;
+  avg_delay: number | null;
+  open_alerts: number;
+  maintenance_due: number;
+  // Reference totals
+  total_routes: number;
+  total_drivers: number;
+  verified_drivers: number;
 }

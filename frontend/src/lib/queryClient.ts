@@ -42,6 +42,9 @@ export const QUERY_KEYS = {
   adminBuses: (p?: unknown) => ["admin", "buses", p ?? {}] as const,
   adminDrivers: (p?: unknown) => ["admin", "drivers", p ?? {}] as const,
 
+  // Admin analytics (P6)
+  adminKpis: ["admin", "overview", "kpis"] as const,
+
   // Driver picker for the assign-driver dialog
   drivers: ["drivers"] as const,
 
@@ -51,6 +54,7 @@ export const QUERY_KEYS = {
   driverTrips: (p?: unknown) => ["driver", "trips", p ?? {}] as const,
   driverTrip: (id: number) => ["driver", "trips", id] as const,
   activeTrips: (routeId: number) => ["trips", "active", routeId] as const,
+  tripEta: (id: number) => ["trips", id, "eta"] as const,
   fleet: ["admin", "fleet"] as const,
 
   // Ticketing / wallet / notifications (P4/P5)

@@ -1,4 +1,5 @@
 import { TrainFront } from "lucide-react";
+import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
@@ -6,12 +7,22 @@ import { cn } from "@/lib/utils";
 export function Brand({
   className,
   invert = false,
+  href = "/",
 }: {
   className?: string;
   invert?: boolean;
+  /** Where the lockup links to. Defaults to the public landing page. */
+  href?: string;
 }) {
   return (
-    <div className={cn("flex items-center gap-2.5", className)}>
+    <Link
+      href={href}
+      aria-label="Smart Transit home"
+      className={cn(
+        "flex items-center gap-2.5 rounded-lg transition-opacity hover:opacity-80",
+        className,
+      )}
+    >
       <span
         className={cn(
           "grid size-8 place-items-center rounded-lg",
@@ -40,6 +51,6 @@ export function Brand({
           AI Platform
         </span>
       </span>
-    </div>
+    </Link>
   );
 }

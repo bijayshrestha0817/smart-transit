@@ -28,6 +28,7 @@ import {
   parseServerMessage,
   type LocationEvent,
 } from "@/lib/realtime/messages";
+import { formatEta } from "@/lib/format";
 import { QUERY_KEYS } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
@@ -115,8 +116,11 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
         lat,
         lng,
         heading,
-        label: `Bus ${at.trip.bus_plate}`,
-        color: "#1e88e5",
+        label: (() => {
+          const eta = formatEta(at.eta);
+          return eta ? `Bus ${at.trip.bus_plate} · ${eta}` : `Bus ${at.trip.bus_plate}`;
+        })(),
+        color: at.trip.route_color || "#1e88e5",
       };
     })
     .filter((m): m is MapMarker => m !== null);
@@ -189,6 +193,7 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
                   const lat = live ? live.lat : seed ? Number(seed.lat) : null;
                   const lng = live ? live.lng : seed ? Number(seed.lng) : null;
                   const located = lat != null && lng != null;
+                  const eta = formatEta(at.eta);
                   const isSelected = selectedId === at.trip.id;
                   return (
                     <li key={at.trip.id}>
@@ -217,8 +222,13 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
                           />
                           Bus {at.trip.bus_plate}
                         </span>
-                        <span className="label-mono shrink-0 text-[0.6rem] text-muted-foreground">
-                          {located ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "waiting for fix"}
+                        <span className="flex shrink-0 flex-col items-end gap-0.5">
+                          {eta ? (
+                            <span className="text-[0.7rem] font-medium text-foreground">{eta}</span>
+                          ) : null}
+                          <span className="label-mono text-[0.6rem] text-muted-foreground">
+                            {located ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "waiting for fix"}
+                          </span>
                         </span>
                       </button>
                     </li>

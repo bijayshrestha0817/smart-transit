@@ -15,6 +15,7 @@ import { stripUndefined } from "./params";
 import type {
   ActiveTrip,
   ApiEnvelope,
+  Eta,
   PaginatedEnvelope,
   PaginationMeta,
   Trip,
@@ -166,4 +167,10 @@ export async function activeTrips(routeId: number): Promise<ActiveTrip[]> {
 export async function fleetSnapshot(): Promise<ActiveTrip[]> {
   const { data } = await api.get<ApiEnvelope<ActiveTrip[]>>("/admin/fleet/");
   return unwrap(data) ?? [];
+}
+
+/** GET /trips/{id}/eta/ -> 200, baseline `Eta` for one trip (IsPassenger; 404 if no such trip). */
+export async function tripEta(id: number): Promise<Eta> {
+  const { data } = await api.get<ApiEnvelope<Eta>>(`/trips/${id}/eta/`);
+  return unwrap(data);
 }

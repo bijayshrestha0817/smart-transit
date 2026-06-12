@@ -4,8 +4,8 @@
  * Leaflet implementation behind `<LiveMap>` (loaded client-only via next/dynamic).
  *
  * Markers use `L.divIcon` (inline SVG) rather than Leaflet's default PNG icons — this
- * sidesteps the well-known broken-image-path problem under bundlers and lets us rotate
- * the bus marker by heading and enlarge the selected one.
+ * sidesteps the well-known broken-image-path problem under bundlers and lets us tint the
+ * bus badge with its route color, point a small heading arrow, and enlarge the selected one.
  *
  * `FitView` frames the map to all points but keys on marker/stop IDENTITY (not their
  * coordinates), so live position ticks don't constantly recenter the view — it only
@@ -25,17 +25,33 @@ const DEFAULT_CENTER: [number, number] = [27.7172, 85.324];
 const FOCUS_ZOOM = 16;
 
 function busIcon(color = "#1e88e5", heading?: number | null, selected = false): L.DivIcon {
-  const rotation = typeof heading === "number" && Number.isFinite(heading) ? heading : 0;
-  const size = selected ? 36 : 26;
+  const hasHeading = typeof heading === "number" && Number.isFinite(heading);
+  const rotation = hasHeading ? heading : 0;
+  const size = selected ? 38 : 28;
   const ring = selected
-    ? `<circle cx="12" cy="12" r="11" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.45"/>`
+    ? `<circle cx="12" cy="12" r="11.5" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.45"/>`
+    : "";
+  // Directional pointer on the badge rim — only drawn when we actually have a heading,
+  // and rotated about the badge centre so the bus glyph itself stays upright/readable.
+  const pointer = hasHeading
+    ? `<g transform="rotate(${rotation} 12 12)"><path d="M12 0.4 L14.7 4.8 L9.3 4.8 Z" fill="${color}" stroke="white" stroke-width="0.9" stroke-linejoin="round"/></g>`
     : "";
   return L.divIcon({
     className: "live-bus-marker",
-    html: `<div style="transform:rotate(${rotation}deg);width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;">
+    html: `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;">
       <svg viewBox="0 0 24 24" width="${size}" height="${size}" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))">
         ${ring}
-        <path d="M12 2 L20 21 L12 16 L4 21 Z" fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+        ${pointer}
+        <circle cx="12" cy="12" r="9.5" fill="${color}" stroke="white" stroke-width="1.5"/>
+        <g transform="translate(5.4 5.4) scale(0.55)" fill="none" stroke="white" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect width="16" height="16" x="4" y="3" rx="2"/>
+          <path d="M4 11h16"/>
+          <path d="M10 6h4"/>
+          <path d="M8 15h.01"/>
+          <path d="M16 15h.01"/>
+          <path d="M6 19v2"/>
+          <path d="M18 21v-2"/>
+        </g>
       </svg></div>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
