@@ -68,3 +68,24 @@ export const isTripCompleted = (m: ServerMessage): m is TripCompletedEvent =>
   "event" in m && m.event === "TRIP_COMPLETED";
 export const isGpsError = (m: ServerMessage): m is GpsErrorEvent =>
   "error" in m && m.error === "invalid_gps_point";
+
+/**
+ * Admin alerts stream (`/ws/alerts/`). This socket only ever emits incident frames, which
+ * mirror the REST `Alert` shape, so it's parsed on its own rather than via the trip union.
+ * Loose on the extra fields (trip/driver/payload) — the UI reads them defensively.
+ */
+export const alertEventSchema = z.object({
+  id: z.number(),
+  type: z.string(),
+  severity: z.enum(["info", "warning", "critical"]),
+  message: z.string(),
+  status: z.enum(["open", "acknowledged"]),
+  created_at: z.string(),
+});
+export type AlertEvent = z.infer<typeof alertEventSchema>;
+
+/** Parse + validate a raw `/ws/alerts/` frame; returns null for anything unrecognized. */
+export function parseAlertEvent(raw: unknown): AlertEvent | null {
+  const result = alertEventSchema.safeParse(raw);
+  return result.success ? result.data : null;
+}

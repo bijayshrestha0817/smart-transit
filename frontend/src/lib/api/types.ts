@@ -261,6 +261,47 @@ export interface AppNotification {
   created_at: string;
 }
 
+// ── Driver logs (P2/P6) ─────────────────────────────────────────────────────────
+
+export type DriverLogEventType = "delay" | "breakdown" | "fuel" | "sos" | "note";
+
+/** A driver-reported operational event (`DriverLogSerializer`). An `sos` log fans out to admins. */
+export interface DriverLog {
+  id: number;
+  event_type: DriverLogEventType;
+  notes: string;
+  trip: number | null;
+  timestamp: string;
+  created_at: string;
+}
+
+// ── Alerts / incident log (P6) ─────────────────────────────────────────────────
+
+/** Today only SOS is produced; the rest are reserved for the P5 anomaly producers. */
+export type AlertType = "sos" | "overspeed" | "route_deviation" | "maintenance_due";
+export type AlertSeverity = "info" | "warning" | "critical";
+export type AlertStatus = "open" | "acknowledged";
+
+/**
+ * An operations incident (`AlertSerializer`). The same shape arrives over `/ws/alerts/`
+ * (live) and `GET /admin/alerts/` (history), so one type covers both. `trip`/`driver` are
+ * FK ids (nullable); `trip_route`/`driver_email` are convenience labels.
+ */
+export interface Alert {
+  id: number;
+  type: AlertType;
+  severity: AlertSeverity;
+  message: string;
+  trip: number | null;
+  trip_route: string | null;
+  driver: number | null;
+  driver_email: string | null;
+  status: AlertStatus;
+  payload_json: Record<string, unknown>;
+  acknowledged_at: string | null;
+  created_at: string;
+}
+
 // ── Admin analytics (P6) ──────────────────────────────────────────────────────
 
 /**

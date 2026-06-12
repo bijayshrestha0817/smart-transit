@@ -11,6 +11,9 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth import get_user_model
 
+from apps.alerts.enums import AlertSeverity, AlertType
+from apps.alerts.models import Alert
+from apps.alerts.v1.service import AlertService
 from apps.buses.models import Bus, Route
 from apps.driver_logs.enums import DriverLogEventType
 from apps.driver_logs.exceptions import InvalidTripForLogError
@@ -105,8 +108,7 @@ def test_create_log_missing_trip_raises(driver):
 # ── SOS fan-out ──────────────────────────────────────────────────────────────
 @pytest.mark.django_db
 def test_sos_creates_one_emergency_notification_per_admin(driver, admins):
-    with patch("apps.driver_logs.realtime.push_alert") as push:
-        log = DriverLogService.create_log(driver, DriverLogEventType.SOS, notes="help!")
+    log = DriverLogService.create_log(driver, DriverLogEventType.SOS, notes="help!")
     # One EMERGENCY notification per admin.
     emergency = Notification.objects.filter(type=NotificationType.EMERGENCY)
     assert emergency.count() == len(admins)
@@ -114,36 +116,28 @@ def test_sos_creates_one_emergency_notification_per_admin(driver, admins):
     for n in emergency:
         assert n.payload_json["log_id"] == log.id
         assert n.payload_json["driver_id"] == driver.id
-    # The broadcast was attempted.
-    assert push.called
 
 
 @pytest.mark.django_db
-def test_sos_broadcast_attempted(driver, admins):
-    with patch("apps.driver_logs.realtime.push_alert") as push:
-        log = DriverLogService.create_log(driver, DriverLogEventType.SOS)
-    push.assert_called_once()
-    payload = push.call_args.args[0]
-    assert payload["event"] == "SOS"
-    assert payload["log_id"] == log.id
-    assert payload["driver_id"] == driver.id
+def test_sos_records_a_critical_alert(driver, admins):
+    log = DriverLogService.create_log(driver, DriverLogEventType.SOS)
+    alert = Alert.objects.get(type=AlertType.SOS)
+    assert alert.severity == AlertSeverity.CRITICAL
+    assert alert.driver_id == driver.id
+    assert alert.payload_json["log_id"] == log.id
 
 
 @pytest.mark.django_db
 def test_non_sos_log_does_not_fan_out(driver, admins):
-    with patch("apps.driver_logs.realtime.push_alert") as push:
-        DriverLogService.create_log(driver, DriverLogEventType.DELAY)
-    assert not push.called
+    DriverLogService.create_log(driver, DriverLogEventType.DELAY)
+    assert Alert.objects.count() == 0
     assert Notification.objects.filter(type=NotificationType.EMERGENCY).count() == 0
 
 
 @pytest.mark.django_db
-def test_sos_broadcast_failure_does_not_break_persist(driver, admins):
-    # Patch the broadcast helper to raise: the SOS log must still commit (best-effort).
-    with patch(
-        "apps.driver_logs.realtime.push_alert",
-        side_effect=RuntimeError("channel layer down"),
-    ):
+def test_sos_alert_failure_does_not_break_persist(driver, admins):
+    # Patch the alert producer to raise: the SOS log must still commit (best-effort).
+    with patch.object(AlertService, "raise_alert", side_effect=RuntimeError("channel down")):
         log = DriverLogService.create_log(driver, DriverLogEventType.SOS)
     assert DriverLog.objects.filter(id=log.id).exists()
 

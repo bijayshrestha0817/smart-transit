@@ -41,6 +41,8 @@ export interface LiveMapProps {
   stops?: MapStop[];
   /** Optional route polyline as `[lat, lng]` pairs. */
   polyline?: [number, number][];
+  /** The viewer's own location ("you are here"), drawn as a distinct pulsing dot. */
+  userLocation?: { lat: number; lng: number } | null;
   /** Initial center; defaults to the first marker/stop, then Kathmandu. */
   center?: [number, number];
   zoom?: number;

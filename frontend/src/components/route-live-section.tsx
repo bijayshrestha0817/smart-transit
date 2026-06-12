@@ -13,11 +13,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Bus, MapPin, Radio } from "lucide-react";
+import { AlertCircle, Bus, MapPin, Navigation, Radio } from "lucide-react";
 
 import { LiveMap, type MapMarker, type MapStop } from "@/components/live-map";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useGeolocation } from "@/hooks/use-geolocation";
 import { useSocket } from "@/hooks/use-socket";
 import { ApiError, toApiError } from "@/lib/api/error";
 import { activeTrips } from "@/lib/api/trips";
@@ -29,6 +30,7 @@ import {
   type LocationEvent,
 } from "@/lib/realtime/messages";
 import { formatEta } from "@/lib/format";
+import { formatDistance, haversineKm } from "@/lib/geo";
 import { QUERY_KEYS } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +53,13 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
   const [positions, setPositions] = useState<Record<number, LivePos>>({});
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lng: number; nonce: number } | null>(null);
+
+  // The passenger's own location — drives the "you are here" marker and bus distances.
+  const { position: me, permission: geoPermission } = useGeolocation();
+  const myLocation = me ? { lat: me.lat, lng: me.lng } : null;
+  // Straight-line distance from the passenger to a bus, formatted, or null if no fix yet.
+  const distanceTo = (lat: number, lng: number): string | null =>
+    me ? formatDistance(haversineKm({ lat: me.lat, lng: me.lng }, { lat, lng })) : null;
 
   const handleLocation = useCallback((tripId: number, ev: LocationEvent) => {
     setPositions((prev) => ({
@@ -117,8 +126,12 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
         lng,
         heading,
         label: (() => {
+          const parts = [`Bus ${at.trip.bus_plate}`];
           const eta = formatEta(at.eta);
-          return eta ? `Bus ${at.trip.bus_plate} · ${eta}` : `Bus ${at.trip.bus_plate}`;
+          if (eta) parts.push(eta);
+          const dist = distanceTo(lat, lng);
+          if (dist) parts.push(`${dist} away`);
+          return parts.join(" · ");
         })(),
         color: at.trip.route_color || "#1e88e5",
       };
@@ -175,11 +188,17 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
                 markers={markers}
                 stops={mapStops}
                 polyline={polyline}
+                userLocation={myLocation}
                 focus={focus}
                 selectedId={selectedId}
                 className="h-[360px] w-full"
               />
             </div>
+            {(geoPermission === "denied" || geoPermission === "unsupported") && (
+              <p className="label-mono text-[0.6rem] text-muted-foreground">
+                Enable location to see your position and the distance to each bus.
+              </p>
+            )}
             {active.length === 0 ? (
               <p className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
                 <Bus className="size-4" />
@@ -194,6 +213,7 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
                   const lng = live ? live.lng : seed ? Number(seed.lng) : null;
                   const located = lat != null && lng != null;
                   const eta = formatEta(at.eta);
+                  const distance = located ? distanceTo(lat, lng) : null;
                   const isSelected = selectedId === at.trip.id;
                   return (
                     <li key={at.trip.id}>
@@ -226,9 +246,16 @@ export function RouteLiveSection({ routeId, stops }: { routeId: number; stops: B
                           {eta ? (
                             <span className="text-[0.7rem] font-medium text-foreground">{eta}</span>
                           ) : null}
-                          <span className="label-mono text-[0.6rem] text-muted-foreground">
-                            {located ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "waiting for fix"}
-                          </span>
+                          {distance ? (
+                            <span className="label-mono flex items-center gap-1 text-[0.6rem] text-muted-foreground">
+                              <Navigation className="size-3" />
+                              {distance} away
+                            </span>
+                          ) : (
+                            <span className="label-mono text-[0.6rem] text-muted-foreground">
+                              {located ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : "waiting for fix"}
+                            </span>
+                          )}
                         </span>
                       </button>
                     </li>

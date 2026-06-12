@@ -3,19 +3,20 @@
 ``apps.driver_logs.exceptions``.
 
 An SOS log (``event_type == SOS``) is the alerts/notifications producer: after the row
-commits it fires the real-time admin broadcast + one persistent EMERGENCY notification
-per admin. Both are **best-effort** (wrapped, never raise) — the committed ``DriverLog``
-is the audit record that matters, so the SOS endpoint still returns 201 even if fan-out
-degrades. Keying the side-effect on ``event_type`` (not the endpoint) means
-``/driver/sos/`` and a ``/driver/logs/`` post with ``event_type=sos`` produce the same
-effect, with no duplication.
+commits it records a persistent ``Alert`` (which broadcasts to the admin alerts feed) plus
+one EMERGENCY ``Notification`` per admin. Both are **best-effort** (wrapped, never raise) —
+the committed ``DriverLog`` is the audit record that matters, so the SOS endpoint still
+returns 201 even if fan-out degrades. Keying the side-effect on ``event_type`` (not the
+endpoint) means ``/driver/sos/`` and a ``/driver/logs/`` post with ``event_type=sos``
+produce the same effect, with no duplication.
 """
 
 import logging
 
 from django.db import transaction
 
-from apps.driver_logs import realtime as dl_realtime
+from apps.alerts.enums import AlertSeverity, AlertType
+from apps.alerts.v1.service import AlertService
 from apps.driver_logs.enums import DriverLogEventType
 from apps.driver_logs.exceptions import InvalidTripForLogError
 from apps.driver_logs.models import DriverLog
@@ -61,32 +62,29 @@ class DriverLogService:
 
     @staticmethod
     def _raise_sos_alert(log: DriverLog) -> None:
-        """Fan an SOS out to admins. Best-effort end-to-end: a broadcast or per-admin
-        notify failure is swallowed + logged and NEVER breaks the committed SOS log.
+        """Fan an SOS out to admins. Best-effort end-to-end: an alert or per-admin notify
+        failure is swallowed + logged and NEVER breaks the committed SOS log.
         """
-        payload = {
-            "event": "SOS",
+        context = {
             "log_id": log.id,
             "driver_id": log.driver_id,
             "trip_id": log.trip_id,
             "notes": log.notes,
-            "timestamp": log.timestamp.isoformat(),
         }
-        # push_alert is itself best-effort, but guard the whole fan-out so a failure in
-        # resolving recipients (admins()) can't break the SOS either. Called via the
-        # module (dl_realtime.push_alert) so it's patchable at its definition site.
+        # Guard the whole fan-out so a failure in raising the alert or resolving recipients
+        # (admins()) can't break the SOS. AlertService.raise_alert persists the incident and
+        # broadcasts it to the admin feed on commit; the per-admin EMERGENCY notification is
+        # the in-app bell. Both are best-effort.
         try:
-            dl_realtime.push_alert(payload)
+            AlertService.raise_alert(
+                type=AlertType.SOS,
+                severity=AlertSeverity.CRITICAL,
+                message=f"SOS reported by driver #{log.driver_id}",
+                trip=log.trip,
+                driver=log.driver,
+                payload={**context, "timestamp": log.timestamp.isoformat()},
+            )
             for admin in DriverLogRepository.admins():
-                NotificationService.create(
-                    admin,
-                    NotificationType.EMERGENCY,
-                    {
-                        "driver_id": log.driver_id,
-                        "trip_id": log.trip_id,
-                        "log_id": log.id,
-                        "notes": log.notes,
-                    },
-                )
+                NotificationService.create(admin, NotificationType.EMERGENCY, context)
         except Exception:  # noqa: BLE001 — SOS fan-out is best-effort; never break the log
             logger.warning("SOS fan-out failed for driver log %s", log.id, exc_info=True)

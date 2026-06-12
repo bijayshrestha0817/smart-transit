@@ -67,6 +67,19 @@ function stopIcon(): L.DivIcon {
   });
 }
 
+/** "You are here" — a blue dot inside a soft accuracy halo, distinct from bus/stop markers. */
+function userIcon(): L.DivIcon {
+  return L.divIcon({
+    className: "live-user-marker",
+    html: `<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center;">
+      <span style="position:absolute;width:22px;height:22px;border-radius:9999px;background:#2563eb;opacity:.18"></span>
+      <span style="width:12px;height:12px;border-radius:9999px;background:#2563eb;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.45)"></span>
+    </div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+}
+
 /**
  * Frame the map to all plotted points, but only when the SET of points changes
  * (keyed on `fitKey` = marker/stop ids) — not on every coordinate tick, which would
@@ -104,6 +117,7 @@ export function LiveMapImpl({
   markers,
   stops = [],
   polyline,
+  userLocation,
   center,
   zoom = 13,
   className,
@@ -114,14 +128,23 @@ export function LiveMapImpl({
     () => [
       ...markers.map((m) => [m.lat, m.lng] as [number, number]),
       ...stops.map((s) => [s.lat, s.lng] as [number, number]),
+      ...(userLocation ? [[userLocation.lat, userLocation.lng] as [number, number]] : []),
     ],
-    [markers, stops],
+    [markers, stops, userLocation],
   );
 
-  // Identity of the plotted set — drives FitView without reacting to position ticks.
+  // Identity of the plotted set — drives FitView without reacting to position ticks. The
+  // user point only nudges the key when it appears/disappears (rounded), not on every fix.
   const fitKey = useMemo(
-    () => [...markers.map((m) => `m${m.id}`), ...stops.map((s) => `s${s.id}`)].sort().join("|"),
-    [markers, stops],
+    () =>
+      [
+        ...markers.map((m) => `m${m.id}`),
+        ...stops.map((s) => `s${s.id}`),
+        userLocation ? "u1" : "",
+      ]
+        .sort()
+        .join("|"),
+    [markers, stops, userLocation],
   );
 
   const initialCenter = center ?? points[0] ?? DEFAULT_CENTER;
@@ -158,6 +181,12 @@ export function LiveMapImpl({
           {m.label ? <Popup>{m.label}</Popup> : null}
         </Marker>
       ))}
+
+      {userLocation && (
+        <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon()} zIndexOffset={500}>
+          <Popup>You are here</Popup>
+        </Marker>
+      )}
 
       <FitView points={points} fitKey={fitKey} />
       <FlyToFocus focus={focus} />

@@ -8,6 +8,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
+from apps.alerts.enums import AlertSeverity, AlertType
+from apps.alerts.models import Alert
 from apps.buses.models import Bus, Route
 from apps.driver_logs.enums import DriverLogEventType
 from apps.driver_logs.models import DriverLog
@@ -148,6 +150,10 @@ def test_driver_can_raise_sos(client, driver, admin):
     emergency = Notification.objects.filter(type=NotificationType.EMERGENCY, user=admin)
     assert emergency.count() == 1
     assert emergency.first().payload_json["log_id"] == body["id"]
+    # …and the incident was recorded as a CRITICAL SOS alert in the incident log.
+    alert = Alert.objects.get(type=AlertType.SOS)
+    assert alert.severity == AlertSeverity.CRITICAL
+    assert alert.payload_json["log_id"] == body["id"]
 
 
 @pytest.mark.django_db
@@ -169,14 +175,13 @@ def test_sos_unowned_trip_returns_400_invalid_trip(client, other_driver, trip):
 
 @pytest.mark.django_db
 def test_sos_broadcast_failure_still_returns_201(client, driver, admin):
-    # A degraded fan-out (broadcast raises) must not break the committed SOS log.
+    # A degraded fan-out (the alert producer raises) must not break the committed SOS log.
     from unittest.mock import patch
 
+    from apps.alerts.v1.service import AlertService
+
     client.force_authenticate(user=driver)
-    with patch(
-        "apps.driver_logs.realtime.push_alert",
-        side_effect=RuntimeError("channel layer down"),
-    ):
+    with patch.object(AlertService, "raise_alert", side_effect=RuntimeError("channel layer down")):
         resp = client.post(SOS_URL, {"notes": "still works"}, format="json")
     assert resp.status_code == 201
     assert DriverLog.objects.filter(id=resp.json()["data"]["id"]).exists()

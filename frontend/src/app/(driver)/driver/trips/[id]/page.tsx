@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { DriverSosButton } from "@/components/driver-sos-button";
 import { LiveMap, type MapMarker } from "@/components/live-map";
 import { TripStatusBadge } from "@/components/trip-status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -235,14 +236,17 @@ export default function DriverTripDetailPage() {
                 </Button>
               )}
               {trip.status === "in_progress" && (
-                <Button
-                  size="lg"
-                  variant="destructive"
-                  onClick={() => endMutation.mutate()}
-                  disabled={endMutation.isPending}
-                >
-                  {endMutation.isPending ? "Ending…" : "End trip"}
-                </Button>
+                <>
+                  <DriverSosButton tripId={trip.id} />
+                  <Button
+                    size="lg"
+                    variant="destructive"
+                    onClick={() => endMutation.mutate()}
+                    disabled={endMutation.isPending}
+                  >
+                    {endMutation.isPending ? "Ending…" : "End trip"}
+                  </Button>
+                </>
               )}
             </div>
           </header>
