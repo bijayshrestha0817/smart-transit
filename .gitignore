@@ -31,8 +31,6 @@ ai_modules/**/*.h5
 ai_modules/**/*.onnx
 ai_modules/**/datasets/
 
-# ── Local dev memory (zero companion, planning-with-files) ───
-dev/memory/
 
 # ── Tooling / OS ─────────────────────────────────────────────
 .DS_Store
