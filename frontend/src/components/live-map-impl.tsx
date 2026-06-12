@@ -154,7 +154,10 @@ export function LiveMapImpl({
       center={initialCenter}
       zoom={zoom}
       scrollWheelZoom
-      className={className ?? "h-[420px] w-full rounded-lg border"}
+      // `isolate` gives the Leaflet container its own stacking context so its panes/controls
+      // (z-index up to ~1000) can't paint over portaled modals/overlays (e.g. the driver SOS
+      // dialog at z-50). Without it, the map leaks above any dialog opened on the same page.
+      className={`isolate ${className ?? "h-[420px] w-full rounded-lg border"}`}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
