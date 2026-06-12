@@ -31,7 +31,7 @@ zero links to those plans from `STATE.md`; it does not duplicate them.
 
 ## Modes
 
-zero reads the argument (or infers intent) and picks a mode:
+If the user text contains `auto`, `status`, `watch`, or `review`, use that mode. Otherwise, `zero` or `hey zero` defaults to REVIEW and `zero <feature request>` defaults to DIRECT. Do not infer a mode from vague wording alone.
 
 | Invocation | Mode | Behavior |
 |------------|------|----------|
@@ -54,20 +54,31 @@ Announce the mode on entry, e.g. `zero engaged — REVIEW mode.`
 - `git log --pretty=format:'%ad|%h|%s' --date=short -15` → append any commits
   not yet in `TIMELINE.md`.
 - `git status --short` and `git rev-parse --abbrev-ref HEAD` → current branch + dirty files.
-- If code structure changed materially (new app/module, new deps, schema), update
-  the relevant `CONTEXT.md` section (match its existing format).
+- If you add or remove a top-level module under `student_management/`, change URLs in
+  `config/urls.py` or `student_management/v1/urls.py`, or modify dependencies in
+  `pyproject.toml`, update the Stack, Architecture / Flow, Modules, and Endpoints
+  sections in `CONTEXT.md` in the existing format.
 
 ### 3. Review the system
 - Run the test suite: `python -m pytest student_management/tests/ -q` (capture pass/fail count).
+- If `pytest` fails, report the failing test names and counts, do not claim the work is done,
+  and stop AUTO mode until the user approves a fix plan.
 - Optionally `pre-commit run --all-files` if there are uncommitted code changes.
+- If any required command fails or is unavailable, report the exact command and failure,
+  do not claim success, and stop the current mode unless the user explicitly asks to
+  continue without that command.
 - Scan `dev/memory/*/Planning.md` for active/incomplete plans (status != DONE).
+- If no incomplete plan is found in `dev/memory/*/Planning.md`, do not invent one.
+  Report that no active plan exists and ask the user whether to create a new plan before
+  proceeding in AUTO mode.
 - Write findings to `STATE.md` (branch, test result, open plans, risks).
 
 ### 4. Decide next step
-- Derive candidate enhancements from: incomplete plans, the "Out of Scope / future
-  bundles" notes in existing plans, failing tests, and obvious gaps (no throttling,
-  no CI, etc.). The senior-DRF backlog already discussed lives in past plans — reuse it.
-- Rank by value-for-effort. Pick the top 1–3.
+- Generate candidates in this order of priority: 1) failing tests, 2) incomplete plans, 3)
+  backlog items marked "Out of Scope / future bundles", 4) other obvious gaps (no
+  throttling, no CI, etc.). Reuse the senior DRF backlog from past plans when applicable.
+- Rank candidate enhancements by expected business value divided by implementation effort
+  on a 1–5 scale; choose the top 2 items and explain the score used for each item.
 
 ### 5. Act (mode-dependent)
 - **REVIEW / STATUS:** present the state report + ranked proposal. Stop. Wait for the user.
