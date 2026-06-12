@@ -24,7 +24,7 @@ password with ``set_password`` directly, guarded by ``check_password`` so re-run
 don't rewrite an already-correct hash.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -42,7 +42,7 @@ from apps.payments.models import Ticket
 from apps.payments.v1.service.TicketService import TicketService
 from apps.payments.v1.service.WalletService import WalletService
 from apps.trips.enums import TripStatus
-from apps.trips.models import Trip
+from apps.trips.models import GpsLocation, Trip
 
 User = get_user_model()
 
@@ -170,9 +170,26 @@ DRIVER_LOGS = [
     ),
 ]
 
+# `--live`: lay GPS breadcrumbs marching these fractions along the first leg (stop 1 → 2) of
+# the promoted in-progress trip, so the live map shows a moving bus with a real GPS-based ETA
+# to stop 2. Speed is above EtaService's MIN_SPEED floor so the GPS path (not schedule) is used.
+LIVE_GPS_FRACTIONS = (Decimal("0.15"), Decimal("0.30"), Decimal("0.45"))
+LIVE_GPS_SPEED = Decimal("24.00")
+_SIX_DP = Decimal("0.000001")
+
 
 class Command(BaseCommand):
     help = "Seed demo users (all roles), routes, stops, and buses (idempotent)."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--live",
+            action="store_true",
+            help=(
+                "Also promote one scheduled trip to in-progress and lay a short GPS trail, "
+                "so the live map has a moving bus with a GPS-based ETA. Idempotent."
+            ),
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -188,14 +205,16 @@ class Command(BaseCommand):
         ticket_count = self._seed_tickets(users_by_email)
         maint_count = self._seed_maintenance()
         log_count = self._seed_driver_logs(drivers)
+        gps_count = self._seed_live_trip() if options.get("live") else 0
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"Seed complete: +{users_created} users, +{route_count} routes, "
                 f"+{stop_count} stops, +{bus_count} buses, +{trip_count} trips, "
                 f"+{wallet_count} wallets, +{ticket_count} tickets, "
-                f"+{maint_count} maintenance logs, +{log_count} driver logs. "
-                "(Existing rows left untouched — safe to re-run.)"
+                f"+{maint_count} maintenance logs, +{log_count} driver logs"
+                + (f", +{gps_count} live GPS points" if options.get("live") else "")
+                + ". (Existing rows left untouched — safe to re-run.)"
             )
         )
         self.stdout.write(f"\nDemo accounts (password for all: {DEMO_PASSWORD}):")
@@ -371,3 +390,51 @@ class Command(BaseCommand):
             )
             count += int(l_created)
         return count
+
+    @staticmethod
+    def _seed_live_trip() -> int:
+        """Promote one trip to in-progress and lay a GPS trail between its first two stops.
+
+        Makes the live map show a moving bus with a real GPS-based ETA (to stop 2), instead
+        of the schedule-only fallback the plain seed produces. Idempotent: the trip flips to
+        in_progress once (start_time set once), and the breadcrumbs use fixed timestamps so a
+        re-run matches the existing rows via ``get_or_create`` rather than duplicating them.
+        """
+        trip = (
+            Trip.objects.filter(status=TripStatus.SCHEDULED).order_by("id").first()
+            or Trip.objects.filter(status=TripStatus.IN_PROGRESS).order_by("id").first()
+        )
+        if trip is None:
+            return 0
+
+        update_fields = []
+        if trip.status != TripStatus.IN_PROGRESS:
+            trip.status = TripStatus.IN_PROGRESS
+            update_fields.append("status")
+        if trip.start_time is None:
+            trip.start_time = timezone.now()
+            update_fields.append("start_time")
+        if update_fields:
+            trip.save(update_fields=[*update_fields, "updated_at"])
+
+        stops = list(trip.route.stops.order_by("sequence")[:2])
+        if len(stops) < 2:
+            return 0
+        origin, nxt = stops
+        base_ts = datetime(2026, 6, 12, 9, 0)  # fixed → idempotent get_or_create on (trip, ts)
+        created = 0
+        for i, fraction in enumerate(LIVE_GPS_FRACTIONS):
+            lat = (origin.lat + (nxt.lat - origin.lat) * fraction).quantize(_SIX_DP)
+            lng = (origin.lng + (nxt.lng - origin.lng) * fraction).quantize(_SIX_DP)
+            _, c = GpsLocation.objects.get_or_create(
+                trip=trip,
+                timestamp=timezone.make_aware(base_ts + timedelta(seconds=i * 30)),
+                defaults={
+                    "lat": lat,
+                    "lng": lng,
+                    "speed": LIVE_GPS_SPEED,
+                    "heading": Decimal("45.00"),
+                },
+            )
+            created += int(c)
+        return created
