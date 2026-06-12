@@ -127,9 +127,27 @@ DEMO_TICKETS = [
 # The Ring Road bus's brake job is past due (next_due < today) so the admin KPI
 # "buses due for maintenance" shows a non-zero signal out of the box.
 MAINTENANCE_LOGS = [
-    ("BA 1 KHA 1001", "Engine oil & filter change", "4500.00", datetime(2026, 5, 20, 9, 0), date(2026, 8, 20)),
-    ("BA 1 KHA 1001", "Brake pad replacement", "7800.00", datetime(2026, 3, 12, 10, 30), date(2026, 6, 1)),
-    ("BA 2 KHA 2002", "Tyre rotation & alignment", "2200.00", datetime(2026, 5, 28, 14, 0), date(2026, 9, 28)),
+    (
+        "BA 1 KHA 1001",
+        "Engine oil & filter change",
+        "4500.00",
+        datetime(2026, 5, 20, 9, 0),
+        date(2026, 8, 20),
+    ),
+    (
+        "BA 1 KHA 1001",
+        "Brake pad replacement",
+        "7800.00",
+        datetime(2026, 3, 12, 10, 30),
+        date(2026, 6, 1),
+    ),
+    (
+        "BA 2 KHA 2002",
+        "Tyre rotation & alignment",
+        "2200.00",
+        datetime(2026, 5, 28, 14, 0),
+        date(2026, 9, 28),
+    ),
     ("BA 3 KHA 3003", "Full workshop service", "15600.00", datetime(2026, 6, 5, 8, 0), None),
 ]
 
@@ -137,9 +155,19 @@ MAINTENANCE_LOGS = [
 # maps into the seeded drivers list (0 = Demo Driver, 1 = Sita Driver). Benign events
 # only: no SOS, so the demo's open-emergencies KPI starts clean.
 DRIVER_LOGS = [
-    (0, DriverLogEventType.NOTE, "Started shift — pre-trip vehicle inspection OK.", datetime(2026, 6, 12, 7, 30)),
+    (
+        0,
+        DriverLogEventType.NOTE,
+        "Started shift — pre-trip vehicle inspection OK.",
+        datetime(2026, 6, 12, 7, 30),
+    ),
     (0, DriverLogEventType.FUEL, "Refueled 40L at Koteshwor pump.", datetime(2026, 6, 12, 8, 15)),
-    (1, DriverLogEventType.DELAY, "~5 min delay at Kalanki due to traffic.", datetime(2026, 6, 12, 9, 5)),
+    (
+        1,
+        DriverLogEventType.DELAY,
+        "~5 min delay at Kalanki due to traffic.",
+        datetime(2026, 6, 12, 9, 5),
+    ),
 ]
 
 
@@ -288,9 +316,7 @@ class Command(BaseCommand):
         for passenger in passengers:
             wallet = WalletService.get_or_create(passenger)
             if not wallet.transactions.exists():
-                WalletService.credit(
-                    wallet, DEMO_WALLET_BALANCE, reference="seed:initial-topup"
-                )
+                WalletService.credit(wallet, DEMO_WALLET_BALANCE, reference="seed:initial-topup")
                 credited += 1
         return credited
 

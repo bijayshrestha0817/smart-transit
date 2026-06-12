@@ -12,6 +12,7 @@ import { useSocket, type SocketStatus } from "@/hooks/use-socket";
 import { ApiError, toApiError } from "@/lib/api/error";
 import { fleetSnapshot } from "@/lib/api/trips";
 import type { ActiveTrip } from "@/lib/api/types";
+import { formatEta } from "@/lib/format";
 import { isLocationEvent, parseServerMessage } from "@/lib/realtime/messages";
 import { QUERY_KEYS } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -103,7 +104,11 @@ export default function AdminFleetPage() {
         lat,
         lng,
         heading,
-        label: `Bus ${at.trip.bus_plate} · ${at.trip.route_name}`,
+        label: (() => {
+          const eta = formatEta(at.eta);
+          const base = `Bus ${at.trip.bus_plate} · ${at.trip.route_name}`;
+          return eta ? `${base} · ${eta}` : base;
+        })(),
         color: at.trip.route_color || "#1e88e5",
       };
     })
@@ -177,6 +182,7 @@ export default function AdminFleetPage() {
                   {active.map((at) => {
                     const live = positions[at.trip.id];
                     const hasLoc = Boolean(live || at.last_position);
+                    const eta = formatEta(at.eta);
                     const isSelected = selectedId === at.trip.id;
                     return (
                       <li key={at.trip.id}>
@@ -206,8 +212,15 @@ export default function AdminFleetPage() {
                               {at.trip.route_name}
                             </p>
                           </div>
-                          <span className="label-mono shrink-0 text-[0.6rem] text-muted-foreground">
-                            {hasLoc ? formatClock(live?.ts ?? at.last_position?.timestamp) : "no fix"}
+                          <span className="flex shrink-0 flex-col items-end gap-0.5">
+                            {eta ? (
+                              <span className="text-[0.7rem] font-medium text-foreground">{eta}</span>
+                            ) : null}
+                            <span className="label-mono text-[0.6rem] text-muted-foreground">
+                              {hasLoc
+                                ? formatClock(live?.ts ?? at.last_position?.timestamp)
+                                : "no fix"}
+                            </span>
                           </span>
                         </button>
                       </li>

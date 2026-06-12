@@ -124,8 +124,20 @@ class LastPositionSerializer(serializers.Serializer):
     timestamp = serializers.DateTimeField()
 
 
+class EtaSerializer(serializers.Serializer):
+    """Baseline heuristic ETA to the next stop (see ``EtaService``)."""
+
+    minutes = serializers.IntegerField(allow_null=True)
+    seconds = serializers.IntegerField(allow_null=True)
+    next_stop = serializers.CharField(allow_null=True)
+    # gps | schedule | unavailable — how the estimate was derived (drives UI confidence).
+    source = serializers.ChoiceField(choices=["gps", "schedule", "unavailable"])
+
+
 class ActiveTripSerializer(serializers.Serializer):
-    """Trip + its last known position (passenger ``/trips/active/`` and admin ``/admin/fleet/``)."""
+    """Trip + its last known position + baseline ETA (passenger ``/trips/active/`` and
+    admin ``/admin/fleet/``)."""
 
     trip = TripSerializer()
     last_position = LastPositionSerializer(allow_null=True)
+    eta = EtaSerializer(allow_null=True)

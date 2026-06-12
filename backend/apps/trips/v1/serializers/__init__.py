@@ -1,6 +1,7 @@
 from .TripSerializer import (
     ActiveTripSerializer,
     AdminTripWriteSerializer,
+    EtaSerializer,
     GpsBatchSerializer,
     GpsPointSerializer,
     LastPositionSerializer,
@@ -12,6 +13,7 @@ from .TripSerializer import (
 __all__ = [
     "ActiveTripSerializer",
     "AdminTripWriteSerializer",
+    "EtaSerializer",
     "GpsBatchSerializer",
     "GpsPointSerializer",
     "LastPositionSerializer",
