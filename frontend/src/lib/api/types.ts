@@ -161,10 +161,22 @@ export interface LastPosition {
   timestamp: string;
 }
 
-/** Trip + its last known position (`/trips/active/` and `/admin/fleet/`; not paginated). */
+/**
+ * Baseline heuristic ETA to the next stop (`EtaService`). `source` signals confidence:
+ * `gps` (live position), `schedule` (timetable fallback), or `unavailable` (no estimate).
+ */
+export interface Eta {
+  minutes: number | null;
+  seconds: number | null;
+  next_stop: string | null;
+  source: "gps" | "schedule" | "unavailable";
+}
+
+/** Trip + its last known position + baseline ETA (`/trips/active/` and `/admin/fleet/`; not paginated). */
 export interface ActiveTrip {
   trip: Trip;
   last_position: LastPosition | null;
+  eta: Eta | null;
 }
 
 // ── Ticketing / payments (P4) ─────────────────────────────────────────────────

@@ -54,6 +54,7 @@ export const QUERY_KEYS = {
   driverTrips: (p?: unknown) => ["driver", "trips", p ?? {}] as const,
   driverTrip: (id: number) => ["driver", "trips", id] as const,
   activeTrips: (routeId: number) => ["trips", "active", routeId] as const,
+  tripEta: (id: number) => ["trips", id, "eta"] as const,
   fleet: ["admin", "fleet"] as const,
 
   // Ticketing / wallet / notifications (P4/P5)

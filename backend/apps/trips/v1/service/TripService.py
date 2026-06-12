@@ -13,6 +13,7 @@ from apps.trips.exceptions import (
 )
 from apps.trips.models import GpsLocation, Trip
 from apps.trips.repository import GpsLocationRepository, TripRepository
+from apps.trips.v1.service.EtaService import EtaService
 
 
 class TripService:
@@ -107,9 +108,32 @@ class TripService:
         return TripService._pair_with_last_position(trips)
 
     @staticmethod
+    def eta_for_trip(trip_id) -> dict | None:
+        """Baseline ETA for a single trip, or ``None`` if no such trip (→ view 404s).
+
+        A trip that exists but isn't trackable (not in progress, no GPS) yields an
+        ``unavailable`` ETA, not a 404 — the trip is real, the estimate just isn't.
+        """
+        trip = TripRepository.get_with_stops(trip_id)
+        if trip is None:
+            return None
+        last_position = GpsLocationRepository.latest_for_trip(trip_id)
+        return EtaService.estimate(trip, last_position, list(trip.route.stops.all()))
+
+    @staticmethod
     def _pair_with_last_position(trips: list[Trip]) -> list[dict]:
         positions = {
             row.trip_id: row
             for row in GpsLocationRepository.latest_for_trips([t.id for t in trips])
         }
-        return [{"trip": trip, "last_position": positions.get(trip.id)} for trip in trips]
+        return [
+            {
+                "trip": trip,
+                "last_position": positions.get(trip.id),
+                # route.stops is prefetched by TripRepository.in_progress() — no N+1 here.
+                "eta": EtaService.estimate(
+                    trip, positions.get(trip.id), list(trip.route.stops.all())
+                ),
+            }
+            for trip in trips
+        ]

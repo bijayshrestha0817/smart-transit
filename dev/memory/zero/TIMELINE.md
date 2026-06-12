@@ -104,3 +104,32 @@
   (`migrate`/`makemigrations`/`seed`/`superuser`/`sh`/`dbshell`). `help` is default goal.
 - Verified: `make help` renders; `make -n` expands cleanly; `make lint`/`fmt-check`/`check`
   pass and `make test` → 255 passed. Makefile is untracked, NOT committed.
+
+## 2026-06-12 — zero session (AUTO — P5-lite baseline ETA, full-stack)
+- User picked: baseline ETA track, plan-then-auto-build, stack on the P6 branch (don't ship
+  P6 first). Plan: `dev/memory/p5-baseline-eta/Planning.md`. Branch `feat/p5-baseline-eta`
+  cut off `feat/p6-admin-kpis`.
+- **Backend** — heuristic ETA, no ML, never raises:
+  - `apps/common/geo.py` (new) — `haversine_km` (true great-circle; complements the
+    BusStopRepository bounding box).
+  - `apps/trips/v1/service/EtaService.py` (new) — `estimate(trip, last_position, stops)`
+    → `{minutes, seconds, next_stop, source}`. Priority: not-in-progress→unavailable;
+    GPS (dist-to-next-stop ÷ live speed, floored by route-avg/city-default 18 km/h);
+    schedule fallback (start_time + estimated_duration − now); else unavailable. ORM-free.
+  - `TripRepository` — `in_progress()`/`get_with_stops()` prefetch `route__stops` (no N+1).
+  - `TripService` — `_pair_with_last_position` now attaches `eta` per trip; new
+    `eta_for_trip(id)` for the dedicated endpoint.
+  - `ActiveTripSerializer` gains nested `EtaSerializer`; `TripEtaView` →
+    `GET /api/v1/trips/{id}/eta/` (IsPassenger; 404 only when no such trip, else 200
+    unavailable). Wired in urls + barrels.
+  - Tests: `test_eta_service.py` (7 unit) + 6 API tests in `test_trip_api.py`.
+- **Frontend** — ETA via the REST `ActiveTrip` payload (both live views already consume it;
+  no new fetch wiring):
+  - `types.ts` `Eta` + `ActiveTrip.eta`; `format.ts` `formatEta`; `trips.ts` `tripEta()` +
+    `QUERY_KEYS.tripEta`.
+  - Passenger `route-live-section` and admin `fleet/page` render ETA in the bus list + map
+    popup label. `format.test.ts` (5 tests).
+- **Verified:** backend **268 passed** (+13), ruff clean, `spectacular --validate
+  --fail-on-warn` clean, `makemigrations --check` → no changes (no model change). Frontend:
+  ESLint clean, `tsc` clean, **vitest 26 passed** (+5), **next build** OK (one transient
+  WSL2 OOM on first build, passed on retry). NOT committed (zero won't commit unless asked).
