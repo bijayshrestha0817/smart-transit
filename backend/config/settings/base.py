@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.driver_logs",
     "apps.maintenance",
+    "apps.analytics",
 ]
 
 MIDDLEWARE = [
