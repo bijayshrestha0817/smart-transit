@@ -15,6 +15,7 @@ class TripSerializer(serializers.ModelSerializer):
 
     bus_plate = serializers.CharField(source="bus.plate", read_only=True)
     route_name = serializers.CharField(source="route.name", read_only=True)
+    route_color = serializers.CharField(source="route.color", read_only=True)
     driver_email = serializers.CharField(source="driver.email", read_only=True)
 
     class Meta:
@@ -25,6 +26,7 @@ class TripSerializer(serializers.ModelSerializer):
             "bus_plate",
             "route",
             "route_name",
+            "route_color",
             "driver",
             "driver_email",
             "status",

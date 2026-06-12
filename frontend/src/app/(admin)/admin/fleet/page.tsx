@@ -104,7 +104,7 @@ export default function AdminFleetPage() {
         lng,
         heading,
         label: `Bus ${at.trip.bus_plate} · ${at.trip.route_name}`,
-        color: "#1e88e5",
+        color: at.trip.route_color || "#1e88e5",
       };
     })
     .filter((m): m is MapMarker => m !== null);

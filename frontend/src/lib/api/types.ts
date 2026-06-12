@@ -133,6 +133,8 @@ export interface Trip {
   /** FK id of the route. */
   route: number;
   route_name: string;
+  /** Route display color (hex), e.g. `#1E88E5` — used to tint the live map marker. */
+  route_color: string;
   /** FK id of the driver. */
   driver: number;
   driver_email: string;

@@ -107,7 +107,7 @@ export function DashboardShell({
       <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
           <div className="flex items-center gap-3">
-            <Brand />
+            <Brand href={dashboardPath(role)} />
             <span className="label-mono hidden rounded-md border bg-muted/50 px-2 py-1 text-[0.6rem] text-muted-foreground sm:inline-block">
               {ROLE_LABEL[role]}
             </span>

@@ -90,3 +90,17 @@
   client, USD formatMoney, TrendChip) — all 6 findings invalid; verified my real code
   against each, all already correct. Lesson recorded to harness memory.
 - Both halves staged (backend 17 files + frontend 6 files), NOT committed.
+
+## 2026-06-11 — zero session (root Makefile)
+- Rewrote the root `Makefile` (was an untracked stub). Fixed a real bug: stub ran
+  `cd backend && docker compose …` but `docker-compose.yml` is at the repo ROOT — compose
+  targets would have failed. Also fixed an inline-comment whitespace bug that corrupted
+  `$(PYBIN)` paths.
+- Targets: setup (`install`/`be-install`/`fe-install`), backend local
+  (`test`/`lint`/`fmt`/`fmt-check`/`check`/`schema`/`migrations-check` via backend/.venv),
+  frontend (`fe-dev`/`frontend`/`fe-lint`/`fe-typecheck`/`fe-test`/`fe-build`), aggregate
+  (`test-all`/`lint-all`/`ci` = GitHub gates, `verify` = ci+schema+migration guard, `clean`),
+  docker stack (`build`/`start`/`up`/`stop`/`down`/`restart`/`logs`/`ps`/`delete`), DB/mgmt
+  (`migrate`/`makemigrations`/`seed`/`superuser`/`sh`/`dbshell`). `help` is default goal.
+- Verified: `make help` renders; `make -n` expands cleanly; `make lint`/`fmt-check`/`check`
+  pass and `make test` → 255 passed. Makefile is untracked, NOT committed.
